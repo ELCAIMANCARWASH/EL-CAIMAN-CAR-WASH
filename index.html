@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10251d">
+  <title>EL CAIMAN CAR WASH</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f6f4;
+      color: #19352a;
+    }
+    header {
+      background: #10251d;
+      color: white;
+      padding: 24px 18px;
+      text-align: center;
+    }
+    header h1 { margin: 0; font-size: 25px; }
+    header p { margin-bottom: 0; color: #d2e4d9; }
+    main {
+      width: min(92%, 650px);
+      margin: 35px auto;
+    }
+    .card {
+      background: white;
+      padding: 26px;
+      border-radius: 16px;
+      box-shadow: 0 5px 20px #19352a12;
+    }
+    h2 { margin-top: 0; }
+    .intro { line-height: 1.6; }
+    .button {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      border: 0;
+      border-radius: 9px;
+      background: #19734a;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      margin-top: 18px;
+    }
+    .secondary {
+      background: white;
+      color: #19734a;
+      border: 1px solid #19734a;
+    }
+    .notice {
+      background: #edf5ef;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    footer {
+      text-align: center;
+      color: #64756c;
+      font-size: 13px;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>EL CAIMAN CAR WASH</h1>
+    <p>Tu vehículo, en buenas manos</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Bienvenido</h2>
+      <p class="intro">
+        Estamos preparando nuestro sistema de reservas para que
+        puedas solicitar el lavado de tu vehículo de forma sencilla.
+      </p>
+
+      <div class="notice">
+        <strong>Próximamente:</strong> selección de vehículos,
+        horarios disponibles y confirmación de reservas.
+      </div>
+
+      <button class="button" type="button"
+        onclick="alert('La reserva en línea estará disponible próximamente.')">
+        Reservar un lavado
+      </button>
+
+      <button class="button secondary" type="button"
+        onclick="alert('La consulta de reservas estará disponible próximamente.')">
+        Consultar mi reserva
+      </button>
+    </section>
+  </main>
+
+  <footer>
+    EL CAIMAN CAR WASH · Sistema de reservas
+  </footer>
+</body>
+</html>
