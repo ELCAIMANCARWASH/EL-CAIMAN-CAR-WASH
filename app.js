@@ -125,9 +125,37 @@ function estiloBase() {
 
 function cabecera(subtitulo) {
   return `
-    <header style="background:#10251d;color:white;padding:25px 16px;text-align:center">
-      <h1 style="margin:0 0 8px">EL CAIMAN CAR WASH</h1>
-      <p style="margin:0">${subtitulo}</p>
+    <header style="
+      background:#10251d;
+      color:white;
+      padding:18px 12px;
+      text-align:center;
+      width:100%;
+      overflow:hidden;
+    ">
+      <img
+        src="./logo.png?v=2"
+        alt="Logo de EL CAIMAN CAR WASH"
+        width="1200"
+        height="800"
+        style="
+          display:block;
+          width:min(85%,260px);
+          height:auto;
+          max-height:210px;
+          object-fit:contain;
+          margin:0 auto 12px;
+          border:0;
+          border-radius:10px;
+        "
+      >
+      <h1 style="
+        margin:0 0 8px;
+        font-size:clamp(20px,4vw,28px);
+        line-height:1.2;
+        overflow-wrap:anywhere;
+      ">EL CAIMAN CAR WASH</h1>
+      <p style="margin:0;line-height:1.4">${subtitulo}</p>
     </header>`;
 }
 
