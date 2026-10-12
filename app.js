@@ -125,8 +125,11 @@ function estiloBase() {
 
 function cabecera(subtitulo) {
   return `
-    <header style="background:#10251d;color:white;padding:25px 16px;text-align:center">
-      <h1 style="margin:0 0 8px">EL CAIMAN CAR WASH</h1>
+    <header style="background:#10251d;color:white;padding:18px 16px;text-align:center">
+      <img src="./logo.png" alt="Logo Detail Lab Car Wash"
+        style="display:block;width:min(100%,220px);height:auto;max-height:190px;object-fit:contain;margin:0 auto 10px;background:#fff;border-radius:12px"
+        onerror="this.style.display='none'">
+      <h1 style="margin:0 0 8px;font-size:clamp(20px,4vw,28px)">EL CAIMAN CAR WASH</h1>
       <p style="margin:0">${subtitulo}</p>
     </header>`;
 }
@@ -373,7 +376,16 @@ async function mostrarCliente() {
         <p>Tu código de reserva es:</p>
         <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.reserva.booking_code || "")}</p>
         <p>Fecha: ${escaparHTML(data.reserva.appointment_date || booking.appointment_date)}</p>
-        <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
+        <p>Hora asignada: ${escaparHTML(
+          data.reserva.scheduled_start_at
+            ? new Intl.DateTimeFormat("es-PA", {
+                timeZone: "America/Panama",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true
+              }).format(new Date(data.reserva.scheduled_start_at))
+            : "Pendiente de confirmar"
+        )}</p>
         <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
         <p>Precio confirmado: ${escaparHTML(formatoPrecio(tariff.price))}</p>
         <p>Guarda tu código para futuras consultas.</p>`;
