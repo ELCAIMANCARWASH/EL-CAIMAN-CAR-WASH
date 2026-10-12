@@ -149,7 +149,7 @@ function mostrarInicio(mensaje = "") {
       <p id="ccw-home-message" role="status">${escaparHTML(mensaje)}</p>
     </main>`;
 
-  document.getElementById("ccw-cliente").onclick = mostrarCliente;
+  document.getElementById("ccw-cliente").onclick = () => mostrarCliente();
   document.getElementById("ccw-admin").onclick = async () => {
     try {
       const session = await obtenerSesionAdmin();
