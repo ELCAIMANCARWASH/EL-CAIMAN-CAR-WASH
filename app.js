@@ -163,18 +163,79 @@ function mostrarInicio(mensaje = "") {
   document.getElementById("ccw-lavador").onclick = () => mostrarLoginLavador();
 }
 
-function mostrarCliente() {
+async function cargarCatalogoPublico() {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "catalogo" })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok !== true) {
+    throw new Error(data.error || `No se pudo cargar el catálogo (HTTP ${response.status}).`);
+  }
+  return Array.isArray(data.catalogo) ? data.catalogo : [];
+}
+
+function formatoPrecio(precio) {
+  return new Intl.NumberFormat("es-PA", {
+    style: "currency", currency: "USD", maximumFractionDigits: 2
+  }).format(precio);
+}
+
+function mostrarTarifasServicio(servicio) {
+  const tarifas = Array.isArray(servicio.tarifas) ? servicio.tarifas : [];
+  const confirmadas = tarifas.filter(t =>
+    t.reservable === true && Number.isFinite(Number(t.precio))
+  );
+  const lista = confirmadas.length
+    ? `<ul style="padding-left:20px;margin:10px 0">${confirmadas.map(t => {
+        const variante = t.variante && t.variante !== "estandar" ? `${t.variante} · ` : "";
+        const vehiculo = t.tipo_vehiculo && !["no_aplica", "no_definido"].includes(t.tipo_vehiculo)
+          ? `${t.tipo_vehiculo.toUpperCase()} · ` : "";
+        return `<li>${escaparHTML(variante + vehiculo)}${escaparHTML(formatoPrecio(Number(t.precio)))}</li>`;
+      }).join("")}</ul>`
+    : `<p style="margin:10px 0"><strong>Consultar a la Administradora</strong></p>`;
+  const pendientes = tarifas.some(t => t.reservable !== true);
+  const aviso = pendientes && confirmadas.length
+    ? `<p style="color:#805500;font-size:14px">Otras variantes: consultar a la Administradora.</p>`
+    : "";
+  return `${lista}${aviso}`;
+}
+
+async function mostrarCliente() {
   estiloBase();
   document.body.innerHTML = `
     ${cabecera("Reservas para clientes")}
-    <main style="max-width:520px;margin:32px auto;padding:20px">
-      <h2>Reserva tu lavado</h2>
-      <p>Reserva en línea: próximamente.</p>
-      <p><strong>Las citas todavía no se pueden confirmar desde esta pantalla.</strong> No queremos mostrarte horarios que no estén realmente disponibles ni crear reservas duplicadas.</p>
-      <p>Cuando se habiliten las reservas, el pago será al llegar: efectivo, Yappy o transferencia.</p>
+    <main style="max-width:760px;margin:24px auto;padding:16px;display:grid;gap:14px">
+      <h2>Servicios y tarifas</h2>
+      <p>Los precios mostrados son los confirmados. Cuando una tarifa esté pendiente, consulta a la Administradora.</p>
+      <p id="ccw-catalog-message" role="status">Cargando servicios…</p>
+      <section id="ccw-catalog" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px"></section>
+      <p><strong>Importante:</strong> esta pantalla consulta el catálogo; todavía no confirma citas ni garantiza horarios.</p>
+      <p>El pago se realiza al llegar: efectivo, Yappy o transferencia.</p>
       ${boton("Volver al inicio", "ccw-back")}
     </main>`;
   document.getElementById("ccw-back").onclick = () => mostrarInicio();
+
+  const message = document.getElementById("ccw-catalog-message");
+  const container = document.getElementById("ccw-catalog");
+  try {
+    const catalogo = await cargarCatalogoPublico();
+    if (!catalogo.length) {
+      message.textContent = "No hay servicios activos para mostrar.";
+      return;
+    }
+    container.innerHTML = catalogo.map(servicio => `
+      <article style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+        <h3 style="margin:0 0 8px">${escaparHTML(servicio.name || "Servicio")}</h3>
+        <p style="color:#52655a;margin:0 0 8px">${escaparHTML(servicio.description || "")}</p>
+        ${mostrarTarifasServicio(servicio)}
+      </article>
+    `).join("");
+    message.textContent = `${catalogo.length} servicios disponibles en el catálogo.`;
+  } catch (error) {
+    message.textContent = `${error.message} Si la función exige sesión, revisaremos su configuración de acceso; nunca publiques la clave secreta.`;
+  }
 }
 
 function mostrarLoginAdmin() {
