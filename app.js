@@ -160,7 +160,7 @@ function mostrarInicio(mensaje = "") {
       mostrarLoginAdmin();
     }
   };
-  document.getElementById("ccw-lavador").onclick = mostrarLoginLavador;
+  document.getElementById("ccw-lavador").onclick = () => mostrarLoginLavador();
 }
 
 function mostrarCliente() {
@@ -169,9 +169,9 @@ function mostrarCliente() {
     ${cabecera("Reservas para clientes")}
     <main style="max-width:520px;margin:32px auto;padding:20px">
       <h2>Reserva tu lavado</h2>
-      <p>Estamos preparando las reservas automáticas para comprobar horarios y evitar duplicar citas.</p>
-      <p><strong>La reserva en línea aún no está habilitada.</strong> Esta pantalla no crea ni confirma citas.</p>
-      <p>Los pagos se realizarán al llegar: efectivo, Yappy o transferencia.</p>
+      <p>Reserva en línea: próximamente.</p>
+      <p><strong>Las citas todavía no se pueden confirmar desde esta pantalla.</strong> No queremos mostrarte horarios que no estén realmente disponibles ni crear reservas duplicadas.</p>
+      <p>Cuando se habiliten las reservas, el pago será al llegar: efectivo, Yappy o transferencia.</p>
       ${boton("Volver al inicio", "ccw-back")}
     </main>`;
   document.getElementById("ccw-back").onclick = () => mostrarInicio();
