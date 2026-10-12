@@ -392,7 +392,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const SUPABASE_URL = "https://adsgjmybppdacdndrqsf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB";
 
 const supabaseHeaders = {
