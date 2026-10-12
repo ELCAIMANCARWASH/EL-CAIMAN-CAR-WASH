@@ -392,8 +392,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB";
-
 const supabaseHeaders = {
   apikey: SUPABASE_PUBLISHABLE_KEY,
   "Content-Type": "application/json"
