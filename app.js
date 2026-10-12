@@ -125,11 +125,8 @@ function estiloBase() {
 
 function cabecera(subtitulo) {
   return `
-    <header style="background:#10251d;color:white;padding:18px 16px;text-align:center">
-      <img src="./logo.png" alt="Logo Detail Lab Car Wash"
-        style="display:block;width:min(100%,220px);height:auto;max-height:190px;object-fit:contain;margin:0 auto 10px;background:#fff;border-radius:12px"
-        onerror="this.style.display='none'">
-      <h1 style="margin:0 0 8px;font-size:clamp(20px,4vw,28px)">EL CAIMAN CAR WASH</h1>
+    <header style="background:#10251d;color:white;padding:25px 16px;text-align:center">
+      <h1 style="margin:0 0 8px">EL CAIMAN CAR WASH</h1>
       <p style="margin:0">${subtitulo}</p>
     </header>`;
 }
@@ -376,16 +373,7 @@ async function mostrarCliente() {
         <p>Tu código de reserva es:</p>
         <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.reserva.booking_code || "")}</p>
         <p>Fecha: ${escaparHTML(data.reserva.appointment_date || booking.appointment_date)}</p>
-        <p>Hora asignada: ${escaparHTML(
-          data.reserva.scheduled_start_at
-            ? new Intl.DateTimeFormat("es-PA", {
-                timeZone: "America/Panama",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true
-              }).format(new Date(data.reserva.scheduled_start_at))
-            : "Pendiente de confirmar"
-        )}</p>
+        <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
         <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
         <p>Precio confirmado: ${escaparHTML(formatoPrecio(tariff.price))}</p>
         <p>Guarda tu código para futuras consultas.</p>`;
@@ -435,6 +423,69 @@ function mostrarLoginAdmin() {
   };
 }
 
+async function cargarReservasAdmin() {
+  const token = sessionStorage.getItem("ccw_access_token");
+  if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ action: "listar_reservas" })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudieron cargar las reservas.");
+  return Array.isArray(data.reservas) ? data.reservas : [];
+}
+
+function mostrarReservasAdmin(reservas) {
+  const container = document.getElementById("ccw-reservas-lista");
+  if (!container) return;
+  if (!reservas.length) {
+    container.innerHTML = '<p class="notice">No hay reservas registradas.</p>';
+    return;
+  }
+  container.innerHTML = reservas.map(r => `
+    <article style="background:#fff;border:1px solid #d7e1da;border-radius:12px;padding:15px;display:grid;gap:7px;overflow-wrap:anywhere">
+      <div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:center">
+        <strong style="font-size:18px">${escaparHTML(r.booking_code || "Sin código")}</strong>
+        <span style="background:#eaf4ed;padding:5px 9px;border-radius:20px">${escaparHTML(r.status || "sin estado")}</span>
+      </div>
+      <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
+      <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
+      <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
+      <div><strong>Hora solicitada:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
+      ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
+        <div style="border-top:1px solid #e3e9e5;padding-top:8px;margin-top:4px">
+          <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
+          <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
+          <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+          <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
+          <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
+        </div>`).join("") : ""}
+    </article>`).join("");
+}
+
+async function actualizarReservasAdmin() {
+  const message = document.getElementById("ccw-reservas-message");
+  const button = document.getElementById("ccw-reservas-refresh");
+  if (button) button.disabled = true;
+  if (message) message.textContent = "Cargando reservas…";
+  try {
+    const reservas = await cargarReservasAdmin();
+    mostrarReservasAdmin(reservas);
+    if (message) message.textContent = `Reservas encontradas: ${reservas.length}.`;
+  } catch (error) {
+    if (message) message.textContent = error.message;
+    const container = document.getElementById("ccw-reservas-lista");
+    if (container) container.innerHTML = '<p class="notice">No se pudieron mostrar las reservas. Revisa el mensaje anterior.</p>';
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
@@ -442,6 +493,13 @@ function mostrarPanelAdmin(profile) {
     <main style="max-width:620px;margin:32px auto;padding:20px;display:grid;gap:14px">
       <h2>Bienvenida, ${escaparHTML(profile.full_name || "Administradora")}</h2>
       <p>Sesión autenticada como administradora.</p>
+      <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Reservas de clientes</h3>
+        <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
+        <button id="ccw-reservas-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar reservas</button>
+        <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
+        <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
+      </section>
       <label for="ccw-washer">Seleccionar lavador</label>
       <select id="ccw-washer" style="padding:12px">
         <option value="${WASHER_ID}">Pedro</option>
@@ -451,6 +509,9 @@ function mostrarPanelAdmin(profile) {
       <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
       <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
     </main>`;
+
+  document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
+  actualizarReservasAdmin();
 
   document.getElementById("ccw-generate-pin").onclick = async event => {
     const button = event.currentTarget;
