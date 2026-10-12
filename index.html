@@ -8,9 +8,47 @@
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Arial, sans-serif; background: #f3f6f4; color: #19352a; }
-    header { background: #10251d; color: white; padding: 24px 18px; text-align: center; }
-    header h1 { margin: 0; font-size: 25px; }
-    header p { margin-bottom: 0; color: #d2e4d9; }
+    
+.site-header {
+  background: #10251d;
+  color: white;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.site-logo {
+  display: block;
+  width: min(90%, 260px);
+  height: auto;
+  max-height: 210px;
+  object-fit: contain;
+  margin: 0 auto 14px;
+  border-radius: 12px;
+}
+
+.site-header h1 {
+  margin: 0;
+  font-size: clamp(20px, 4vw, 28px);
+  overflow-wrap: anywhere;
+}
+
+.site-header p {
+  margin: 8px 0 0;
+  color: #d2e4d9;
+}
+
+@media (max-width: 480px) {
+  .site-header {
+    padding: 16px 12px;
+  }
+
+  .site-logo {
+    width: min(85%, 220px);
+    max-height: 170px;
+    margin-bottom: 10px;
+  }
+}
+
     main { width: min(92%, 650px); margin: 35px auto; }
     .card { background: white; padding: 26px; border-radius: 16px; box-shadow: 0 5px 20px #19352a12; }
     h2 { margin-top: 0; }
@@ -22,12 +60,19 @@
   </style>
 </head>
 <body>
-  <header>
-    <img src="./logo.png" alt="Logo Detail Lab Car Wash"
-      style="display:block;width:min(100%,220px);height:auto;max-height:190px;object-fit:contain;margin:0 auto 12px;background:#fff;border-radius:12px">
-    <h1>EL CAIMAN CAR WASH</h1>
-    <p>Tu vehículo, en buenas manos</p>
-  </header>
+  
+<header class="site-header">
+  <img
+    class="site-logo"
+    src="./logo.png"
+    alt="Logo de EL CAIMAN CAR WASH"
+    width="1200"
+    height="800"
+  >
+  <h1>EL CAIMAN CAR WASH</h1>
+  <p>Tu vehículo, en buenas manos</p>
+</header>
+
   <main>
     <section class="card">
       <h2>Bienvenido</h2>
