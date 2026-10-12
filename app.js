@@ -205,37 +205,185 @@ function mostrarTarifasServicio(servicio) {
 async function mostrarCliente() {
   estiloBase();
   document.body.innerHTML = `
-    ${cabecera("Reservas para clientes")}
+    ${cabecera("Agendar una cita")}
     <main style="max-width:760px;margin:24px auto;padding:16px;display:grid;gap:14px">
-      <h2>Servicios y tarifas</h2>
-      <p>Los precios mostrados son los confirmados. Cuando una tarifa esté pendiente, consulta a la Administradora.</p>
-      <p id="ccw-catalog-message" role="status">Cargando servicios…</p>
-      <section id="ccw-catalog" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px"></section>
-      <p><strong>Importante:</strong> esta pantalla consulta el catálogo; todavía no confirma citas ni garantiza horarios.</p>
-      <p>El pago se realiza al llegar: efectivo, Yappy o transferencia.</p>
-      ${boton("Volver al inicio", "ccw-back")}
+      <section style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:20px;display:grid;gap:12px">
+        <h2 style="margin:0">Reserva tu lavado</h2>
+        <p style="margin:0;color:#52655a">Selecciona una tarifa confirmada y solicita el horario. La cita solo queda confirmada si el sistema encuentra disponibilidad.</p>
+        <form id="ccw-booking-form" style="display:grid;gap:12px">
+          <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Correo (opcional)<input id="ccw-customer-email" name="customer_email" type="email" maxlength="254" autocomplete="email" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Servicio y tarifa<select id="ccw-booking-tariff" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Cargando tarifas confirmadas…</option></select></label>
+          <p id="ccw-booking-price" style="margin:0;font-weight:bold"></p>
+          <label>Marca del vehículo<input id="ccw-car-make" maxlength="80" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Modelo del vehículo<input id="ccw-car-model" maxlength="80" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Color<input id="ccw-car-color" maxlength="60" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Placa (opcional)<input id="ccw-car-plate" maxlength="30" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Fecha solicitada<input id="ccw-booking-date" type="date" required style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Hora solicitada<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona una fecha primero</option></select></label>
+          <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
+          <p class="notice">Horario de atención publicado: 8:00 a. m. a 6:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. El horario final depende de la disponibilidad real.</p>
+          <button id="ccw-submit-booking" class="button" type="submit" style="margin-top:0">Solicitar cita</button>
+          <p id="ccw-booking-message" role="status" aria-live="polite"></p>
+        </form>
+        <div id="ccw-booking-success" hidden style="background:#edf5ef;border-radius:10px;padding:16px"></div>
+        <button class="button secondary" id="ccw-client-back" type="button">Volver al inicio</button>
+      </section>
     </main>`;
-  document.getElementById("ccw-back").onclick = () => mostrarInicio();
 
-  const message = document.getElementById("ccw-catalog-message");
-  const container = document.getElementById("ccw-catalog");
-  try {
-    const catalogo = await cargarCatalogoPublico();
-    if (!catalogo.length) {
-      message.textContent = "No hay servicios activos para mostrar.";
+  document.getElementById("ccw-client-back").onclick = () => mostrarInicio();
+
+  const form = document.getElementById("ccw-booking-form");
+  const tariffSelect = document.getElementById("ccw-booking-tariff");
+  const priceLabel = document.getElementById("ccw-booking-price");
+  const dateInput = document.getElementById("ccw-booking-date");
+  const timeSelect = document.getElementById("ccw-booking-time");
+  const message = document.getElementById("ccw-booking-message");
+  const submit = document.getElementById("ccw-submit-booking");
+  const success = document.getElementById("ccw-booking-success");
+  const validVehicleTypes = new Set(["sedan", "suv", "4x4", "busito", "camioneta", "pick_up"]);
+  let reservableTariffs = [];
+
+  // Usa fecha local de Panamá para evitar ofrecer fechas pasadas.
+  const panamaToday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Panama", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
+  dateInput.min = panamaToday;
+
+  function actualizarPrecio() {
+    const selected = reservableTariffs[Number(tariffSelect.value)];
+    priceLabel.textContent = selected
+      ? `Precio confirmado: ${formatoPrecio(Number(selected.price))} · ${selected.serviceName}`
+      : "Selecciona un servicio con tarifa confirmada.";
+  }
+
+  function actualizarHoras() {
+    const date = dateInput.value;
+    timeSelect.innerHTML = "";
+    if (!date) {
+      timeSelect.add(new Option("Selecciona una fecha primero", ""));
       return;
     }
-    container.innerHTML = catalogo.map(servicio => `
-      <article style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)">
-        <h3 style="margin:0 0 8px">${escaparHTML(servicio.name || "Servicio")}</h3>
-        <p style="color:#52655a;margin:0 0 8px">${escaparHTML(servicio.description || "")}</p>
-        ${mostrarTarifasServicio(servicio)}
-      </article>
-    `).join("");
-    message.textContent = `${catalogo.length} servicios disponibles en el catálogo.`;
-  } catch (error) {
-    message.textContent = `${error.message} Si la función exige sesión, revisaremos su configuración de acceso; nunca publiques la clave secreta.`;
+    // Horas solicitables cada 30 minutos. La función SQL valida disponibilidad
+    // real y puede rechazar un horario ocupado o sin plan publicado.
+    timeSelect.add(new Option("Selecciona una hora", ""));
+    for (let minutes = 8 * 60; minutes <= 16 * 60 + 30; minutes += 30) {
+      const h = String(Math.floor(minutes / 60)).padStart(2, "0");
+      const m = String(minutes % 60).padStart(2, "0");
+      const value = `${h}:${m}`;
+      if (date === panamaToday) {
+        const nowParts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "America/Panama", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+        }).format(new Date()).split(":").map(Number);
+        if (minutes <= nowParts[0] * 60 + nowParts[1]) continue;
+      }
+      if (minutes >= 13 * 60 && minutes < 14 * 60) continue;
+      timeSelect.add(new Option(value, value));
+    }
   }
+
+  dateInput.addEventListener("change", actualizarHoras);
+  tariffSelect.addEventListener("change", actualizarPrecio);
+
+  try {
+    message.textContent = "Cargando servicios y tarifas…";
+    const catalogo = await cargarCatalogoPublico();
+    for (const service of catalogo) {
+      for (const tariff of (service.tarifas || [])) {
+        if (tariff.reservable === true && Number.isFinite(Number(tariff.precio)) &&
+            Number(tariff.precio) >= 0 && validVehicleTypes.has(tariff.tipo_vehiculo)) {
+          reservableTariffs.push({
+            serviceId: service.id,
+            serviceName: service.name,
+            variant: tariff.variante,
+            vehicleType: tariff.tipo_vehiculo,
+            price: Number(tariff.precio)
+          });
+        }
+      }
+    }
+    tariffSelect.innerHTML = "";
+    tariffSelect.add(new Option("Selecciona servicio y vehículo", ""));
+    reservableTariffs.forEach((tariff, index) => {
+      const vehicle = tariff.vehicleType.toUpperCase().replace("PICK_UP", "PICK-UP");
+      const variant = tariff.variant && tariff.variant !== "estandar" ? ` · ${tariff.variant}` : "";
+      tariffSelect.add(new Option(
+        `${tariff.serviceName} · ${vehicle}${variant} · ${formatoPrecio(tariff.price)}`,
+        String(index)
+      ));
+    });
+    message.textContent = reservableTariffs.length
+      ? "Selecciona el servicio, la fecha y la hora solicitada."
+      : "No hay tarifas confirmadas disponibles para reservar en línea. Consulta a la Administradora.";
+    actualizarPrecio();
+    actualizarHoras();
+  } catch (error) {
+    message.textContent = error.message || "No se pudo cargar el catálogo.";
+    submit.disabled = true;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    success.hidden = true;
+    message.textContent = "Enviando solicitud y comprobando disponibilidad…";
+    submit.disabled = true;
+    try {
+      const tariff = reservableTariffs[Number(tariffSelect.value)];
+      if (!tariff) throw new Error("Selecciona un servicio y una tarifa confirmada.");
+      if (!dateInput.value || !timeSelect.value) throw new Error("Selecciona fecha y hora.");
+
+      const booking = {
+        customer_name: document.getElementById("ccw-customer-name").value.trim(),
+        customer_phone: document.getElementById("ccw-customer-phone").value.trim(),
+        customer_email: document.getElementById("ccw-customer-email").value.trim() || null,
+        appointment_date: dateInput.value,
+        requested_start_time: timeSelect.value,
+        customer_notes: document.getElementById("ccw-booking-notes").value.trim() || null,
+        vehicles: [{
+          service_id: tariff.serviceId,
+          variant: tariff.variant,
+          vehicle_type: tariff.vehicleType,
+          make: document.getElementById("ccw-car-make").value.trim() || null,
+          model: document.getElementById("ccw-car-model").value.trim() || null,
+          color: document.getElementById("ccw-car-color").value.trim() || null,
+          license_plate: document.getElementById("ccw-car-plate").value.trim() || null,
+          customer_notes: null
+        }]
+      };
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "crear_reserva", reserva: booking })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok !== true || data.reserva?.ok !== true) {
+        throw new Error(data.error || data.reserva?.error || "No se pudo confirmar la cita. Prueba otra hora o fecha.");
+      }
+
+      // Nunca mostrar ni guardar lookup_secret en la página.
+      form.hidden = true;
+      success.hidden = false;
+      success.innerHTML = `
+        <h3 style="margin-top:0">¡Solicitud confirmada!</h3>
+        <p>Tu código de reserva es:</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.reserva.booking_code || "")}</p>
+        <p>Fecha: ${escaparHTML(data.reserva.appointment_date || booking.appointment_date)}</p>
+        <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
+        <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
+        <p>Precio confirmado: ${escaparHTML(formatoPrecio(tariff.price))}</p>
+        <p>Guarda tu código para futuras consultas.</p>`;
+      message.textContent = "";
+    } catch (error) {
+      message.textContent = error.message || "Ocurrió un error al solicitar la cita.";
+    } finally {
+      submit.disabled = false;
+    }
+  });
 }
 
 function mostrarLoginAdmin() {
