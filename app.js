@@ -392,11 +392,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const supabaseHeaders = {
-  apikey: SUPABASE_PUBLISHABLE_KEY,
-  "Content-Type": "application/json"
-};
-
 async function comprobarConexion() {
   try {
     const respuesta = await fetch(
