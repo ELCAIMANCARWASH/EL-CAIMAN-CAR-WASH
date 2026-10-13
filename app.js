@@ -343,8 +343,13 @@ async function mostrarCliente() {
     if (/interior/.test(text)) return "interior";
     if (/auto|vehiculo|car wash|lavado de autos|limpieza de autos/.test(text)) return "autos";
     // El campo category de Supabase puede clasificar servicios de autos con nombres propios.
-    const cat = String(service.category || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    if (/auto|vehiculo|car/.test(cat)) return "autos";
+    const cat = String(service.category || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase();
+
+if (/auto|vehiculo|car/.test(cat)) return "autos";
+if (cat === "vehiculos") return "autos";
     return "";
   }
 
@@ -418,7 +423,7 @@ return tariffs.some(t => {
         Number(t.precio) >= 0;
 });
     });
-
+console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => s.name));
     matchingServices.forEach(service => {
       const description = String(service.description || service.descripcion || "").trim();
       let label = service.name;
