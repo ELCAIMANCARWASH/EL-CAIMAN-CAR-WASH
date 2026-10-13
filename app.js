@@ -406,9 +406,17 @@ async function mostrarCliente() {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       if (/combo\s*#?\s*\d+|polish|pulimento|encerado/.test(text)) return false;
       const tariffs = Array.isArray(s.tarifas) ? s.tarifas : [];
-      return tariffs.some(t => t.reservable === true && t.precio !== null &&
-        Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0);
-    });
+return tariffs.some(t => {
+  const status = String(t.estado_precio || t.price_status || "").toLowerCase();
+  const confirmed = status === "confirmado" || status === "confirmed";
+  const reservable = t.reservable === true || confirmed;
+
+  return reservable &&
+    t.precio !== null &&
+    t.precio !== undefined &&
+    Number.isFinite(Number(t.precio)) &&
+    Number(t.precio) >= 0;
+});
 
     matchingServices.forEach(service => {
       const description = String(service.description || service.descripcion || "").trim();
