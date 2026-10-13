@@ -415,8 +415,9 @@ return tariffs.some(t => {
     t.precio !== null &&
     t.precio !== undefined &&
     Number.isFinite(Number(t.precio)) &&
-    Number(t.precio) >= 0;
+        Number(t.precio) >= 0;
 });
+    });
 
     matchingServices.forEach(service => {
       const description = String(service.description || service.descripcion || "").trim();
