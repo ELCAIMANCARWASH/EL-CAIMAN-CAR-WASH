@@ -398,8 +398,29 @@ async function mostrarCliente() {
       serviceHelp.textContent = "";
     }
 
-    const matchingServices = catalogServices.filter(s => categoriaDeServicio(s) === selectedCategory);
-    matchingServices.forEach(service => serviceSelect.add(new Option(service.name, service.id)));
+    let matchingServices = catalogServices.filter(s => categoriaDeServicio(s) === selectedCategory);
+
+    // Según las instrucciones de Excel, los pulimentos, recubrimientos cerámicos,
+    // restauración de faros y limpieza de conductos no forman parte de "Limpieza de autos".
+    if (selectedCategory === "autos") {
+      matchingServices = matchingServices.filter(s => {
+        const text = `${s.name || ""} ${s.description || s.descripcion || ""}`
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        return !/polish|pulimento|encerado|ceramic|ceramico|recubrimiento|restauracion de faros|conductos de aire/.test(text);
+      });
+    }
+
+    matchingServices.forEach(service => {
+      const description = String(service.description || service.descripcion || "").trim();
+      const normalizedName = String(service.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      let label = service.name;
+      if (selectedCategory === "autos" && /combo\s*#?\s*\d+/.test(normalizedName) && !description) {
+        label = `${service.name} — contenido no detallado; consultar antes de reservar`;
+      } else if (description) {
+        label = `${service.name} — ${description}`;
+      }
+      serviceSelect.add(new Option(label, service.id));
+    });
 
     if (!matchingServices.length) {
       serviceSelect.add(new Option("Opciones pendientes de configurar", ""));
@@ -417,10 +438,26 @@ async function mostrarCliente() {
 
     const vehicleCategory = esCategoriaDeVehiculo(selectedCategory);
     const vehicleType = vehicleTypeSelect.value;
-    const rawTariffs = (selectedService.tarifas || []).filter(t =>
-      t.reservable === true && t.precio !== null &&
-      Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0
-    );
+    const excelExpectedPrice = (category, vehicle) => {
+      const vehicleKey = String(vehicle || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const prices = {
+        motor: { sedan: 15, suv: 18, "4x4": 20, pick_up: 20, pickup: 20 },
+        interior: { sedan: 60, suv: 70, "4x4": 90, pick_up: 80, pickup: 80 },
+        lluvia: { sedan: 15, suv: 15, "4x4": 15, pick_up: 15, pickup: 15, busito: 15, camioneta: 15 }
+      };
+      return prices[category]?.[vehicleKey];
+    };
+    const rawTariffs = (selectedService.tarifas || []).filter(t => {
+      const valid = t.reservable === true && t.precio !== null &&
+        Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0;
+      if (!valid) return false;
+      // No mostrar una tarifa de Supabase que contradiga el Excel.
+      if (["motor", "interior", "lluvia"].includes(selectedCategory)) {
+        const expected = excelExpectedPrice(selectedCategory, t.tipo_vehiculo || vehicleTypeSelect.value);
+        return expected !== undefined && Number(t.precio) === expected;
+      }
+      return true;
+    });
     allTariffs = [];
 
     const matching = rawTariffs.filter(t => {
@@ -443,9 +480,11 @@ async function mostrarCliente() {
     });
 
     if (!matching.length) {
-      serviceHelp.textContent = vehicleCategory
-        ? "No hay tarifa confirmada para este servicio y tipo de vehículo. Consulta a la Administradora."
-        : "No hay tarifa reservable confirmada para esta opción en Supabase. Consulta a la Administradora.";
+      serviceHelp.textContent = ["motor", "interior", "lluvia"].includes(selectedCategory)
+        ? "La tarifa de Supabase todavía no coincide con el Excel o no está confirmada. No mostraremos un precio incorrecto; debe ajustarse el catálogo antes de reservar."
+        : vehicleCategory
+          ? "No hay tarifa confirmada para este servicio y tipo de vehículo. Consulta a la Administradora."
+          : "No hay tarifa reservable confirmada para esta opción en Supabase. Consulta a la Administradora.";
       tariffSelect.add(new Option("Consultar a la Administradora", ""));
       tariffSelect.disabled = true;
       return;
