@@ -241,7 +241,6 @@ async function mostrarCliente() {
         <form id="ccw-booking-form" style="display:grid;gap:12px">
           <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Correo (opcional)<input id="ccw-customer-email" name="customer_email" type="email" maxlength="254" autocomplete="email" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Número de casa y dirección exacta (obligatorio)
             <input id="ccw-customer-address" name="customer_address" required minlength="2" maxlength="250" autocomplete="street-address"
               style="display:block;width:100%;padding:12px;margin-top:5px"
@@ -578,7 +577,6 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
       const booking = {
         customer_name: document.getElementById("ccw-customer-name").value.trim(),
         customer_phone: document.getElementById("ccw-customer-phone").value.trim(),
-        customer_email: document.getElementById("ccw-customer-email").value.trim() || null,
         customer_address: document.getElementById("ccw-customer-address").value.trim(),
         appointment_date: dateInput.value,
         requested_start_time: timeSelect.value,
@@ -684,6 +682,76 @@ async function cargarReservasAdmin() {
   return Array.isArray(data.reservas) ? data.reservas : [];
 }
 
+async function llamarGestionReservasAdmin(body) {
+  const token = sessionStorage.getItem("ccw_access_token");
+  if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) throw new Error(data.error || `Error HTTP ${response.status}`);
+  return data;
+}
+
+async function mostrarPagosReserva(appointmentId, container) {
+  container.innerHTML = '<p role="status">Consultando pagos…</p>';
+  try {
+    const result = await llamarGestionReservasAdmin({ action: "listar_pagos", appointment_id: appointmentId });
+    const payments = Array.isArray(result.pagos) ? result.pagos : [];
+    const usd = value => formatoPrecio(Number(value || 0));
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px">
+        <div style="background:#edf5ef;padding:10px;border-radius:8px"><small>Total confirmado</small><div><strong>${escaparHTML(usd(result.total_confirmado))}</strong></div></div>
+        <div style="background:#fff5df;padding:10px;border-radius:8px"><small>Pendiente de confirmar</small><div><strong>${escaparHTML(usd(result.total_pendiente))}</strong></div></div>
+      </div>
+      <div style="display:grid;gap:8px;margin-top:10px">
+        ${payments.length ? payments.map(p => `<article style="border:1px solid #d7e1da;border-radius:8px;padding:10px;display:grid;gap:5px">
+          <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>${escaparHTML(usd(p.amount))}</strong><span>${escaparHTML(p.payment_status || "pendiente")}</span></div>
+          <div>Método: ${escaparHTML(({yappy:"Yappy",ach:"ACH",efectivo:"Efectivo"})[p.payment_method] || p.payment_method || "—")}</div>
+          ${p.reference ? `<div>Referencia: ${escaparHTML(p.reference)}</div>` : ""}
+          ${p.notes ? `<div>Nota: ${escaparHTML(p.notes)}</div>` : ""}
+          ${p.payment_status === "pendiente" ? `<button type="button" data-confirm-payment="${escaparHTML(p.id)}" style="padding:10px;background:#18764e;color:#fff;border:0;border-radius:8px;cursor:pointer">Confirmar recepción del dinero</button>` : `<small>Confirmado: ${escaparHTML(p.confirmed_at ? new Date(p.confirmed_at).toLocaleString("es-PA", {timeZone:"America/Panama"}) : "—")}</small>`}
+        </article>`).join("") : '<p>No hay pagos registrados para esta reserva.</p>'}
+      </div>
+      <form data-payment-form style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-top:12px">
+        <label>Importe (USD)<input name="amount" type="number" min="0.01" step="0.01" required style="box-sizing:border-box;width:100%;padding:11px;margin-top:4px"></label>
+        <label>Método<select name="payment_method" required style="box-sizing:border-box;width:100%;padding:11px;margin-top:4px"><option value="yappy">Yappy</option><option value="ach">ACH</option><option value="efectivo">Efectivo</option></select></label>
+        <label>Referencia<input name="reference" maxlength="160" style="box-sizing:border-box;width:100%;padding:11px;margin-top:4px"></label>
+        <label>Nota<input name="notes" maxlength="1000" style="box-sizing:border-box;width:100%;padding:11px;margin-top:4px"></label>
+        <button type="submit" style="grid-column:1/-1;padding:12px;background:#183b2c;color:white;border:0;border-radius:8px;cursor:pointer">Registrar pago pendiente</button>
+        <p data-payment-message role="status" style="grid-column:1/-1;margin:0"></p>
+      </form>
+      <p style="font-size:13px;color:#52655a">Registrar no confirma la recepción. Ana debe verificar el dinero antes de confirmar. Esto no cierra automáticamente el servicio.</p>`;
+
+    container.querySelectorAll("[data-confirm-payment]").forEach(button => button.addEventListener("click", async () => {
+      if (!confirm("Confirma únicamente si verificaste que el dinero fue recibido. ¿Confirmar este pago?")) return;
+      button.disabled = true;
+      try {
+        await llamarGestionReservasAdmin({ action: "confirmar_pago", payment_id: button.dataset.confirmPayment });
+        await mostrarPagosReserva(appointmentId, container);
+      } catch (error) { alert(error.message || "No se pudo confirmar el pago."); button.disabled = false; }
+    }));
+
+    const form = container.querySelector("[data-payment-form]");
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const submit = form.querySelector('button[type="submit"]');
+      const output = form.querySelector("[data-payment-message]");
+      const values = new FormData(form);
+      submit.disabled = true; output.textContent = "Registrando pago…";
+      try {
+        await llamarGestionReservasAdmin({ action:"registrar_pago", appointment_id:appointmentId, amount:Number(values.get("amount")), payment_method:values.get("payment_method"), reference:String(values.get("reference") || "").trim() || null, notes:String(values.get("notes") || "").trim() || null });
+        await mostrarPagosReserva(appointmentId, container);
+      } catch (error) { output.textContent = error.message || "No se pudo registrar el pago."; submit.disabled = false; }
+    });
+  } catch (error) {
+    container.innerHTML = `<p role="alert">${escaparHTML(error.message || "No se pudieron consultar los pagos.")}</p><button type="button" data-retry-payments style="padding:10px;border:0;border-radius:8px">Reintentar</button>`;
+    container.querySelector("[data-retry-payments]").onclick = () => mostrarPagosReserva(appointmentId, container);
+  }
+}
+
 function mostrarReservasAdmin(reservas) {
   const container = document.getElementById("ccw-reservas-lista");
   if (!container) return;
@@ -691,26 +759,68 @@ function mostrarReservasAdmin(reservas) {
     container.innerHTML = '<p class="notice">No hay reservas registradas.</p>';
     return;
   }
-  container.innerHTML = reservas.map(r => `
-    <article style="background:#fff;border:1px solid #d7e1da;border-radius:12px;padding:15px;display:grid;gap:7px;overflow-wrap:anywhere">
-      <div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:center">
-        <strong style="font-size:18px">${escaparHTML(r.booking_code || "Sin código")}</strong>
-        <span style="background:#eaf4ed;padding:5px 9px;border-radius:20px">${escaparHTML(r.status || "sin estado")}</span>
-      </div>
-      <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
-      <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
-      <div><strong>Número de casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
-      <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
-      <div><strong>Hora solicitada:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
-      ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
-        <div style="border-top:1px solid #e3e9e5;padding-top:8px;margin-top:4px">
-          <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
-          <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
-          <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
-          <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
-          <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
-        </div>`).join("") : ""}
-    </article>`).join("");
+
+  container.innerHTML = reservas.map((r, i) => {
+    const direccion = r.customer_address || r.house_number || r.address || "Dirección no registrada";
+    const vehiculos = Array.isArray(r.vehicles) ? r.vehicles : [];
+    const detallesVehiculos = vehiculos.map(v => `
+      <div style="border-top:1px solid #e3e9e5;padding-top:10px;margin-top:10px;display:grid;gap:5px">
+        <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
+        <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
+        <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+        <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
+        <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
+      </div>`).join("");
+    const detailsId = `ccw-reserva-detalle-${i}`;
+    return `
+      <article style="background:#fff;border:1px solid #d7e1da;border-radius:10px;padding:12px;display:grid;gap:8px;overflow-wrap:anywhere">
+        <div style="display:flex;gap:10px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <strong style="font-size:17px;display:block">${escaparHTML(direccion)}</strong>
+            <span style="font-size:14px;color:#52655a">${escaparHTML(r.customer_name || "Cliente sin nombre")} · ${escaparHTML(r.customer_phone || "Sin teléfono")}</span>
+          </div>
+          <span style="background:#eaf4ed;padding:5px 9px;border-radius:20px;white-space:nowrap">${escaparHTML(r.status || "sin estado")}</span>
+        </div>
+        <div style="font-size:14px;color:#52655a">${escaparHTML(r.appointment_date || "Fecha pendiente")} · ${escaparHTML(r.requested_start_time || "Hora pendiente")}</div>
+        <button type="button" data-details-target="${detailsId}" aria-expanded="false" style="padding:10px;background:#edf5ef;color:#183126;border:1px solid #cbd9cf;border-radius:8px;text-align:left;cursor:pointer;font-weight:bold">Ver ficha completa</button>
+        <div id="${detailsId}" hidden style="padding-top:8px;display:none;gap:6px">
+          <div><strong>Código interno:</strong> ${escaparHTML(r.booking_code || "Sin código")}</div>
+          <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
+          <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
+          <div><strong>Número de casa / dirección:</strong> ${escaparHTML(direccion)}</div>
+          <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
+          <div><strong>Hora solicitada:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
+          ${detallesVehiculos}
+          <button type="button" data-open-payments="${escaparHTML(r.appointment_id || "")}" style="margin-top:10px;padding:12px;background:#183b2c;color:#fff;border:0;border-radius:8px;cursor:pointer" ${r.appointment_id ? "" : "disabled"}>Gestionar pagos</button>
+          <section data-payments-panel="${escaparHTML(r.appointment_id || "")}" hidden style="display:none;gap:10px;margin-top:8px;border-top:1px solid #d7e1da;padding-top:12px;min-width:0"></section>
+          <p style="margin:8px 0 0;color:#52655a;font-size:13px">Ficha consultable en esta página; no se descarga ningún PDF.</p>
+        </div>
+      </article>`;
+  }).join("");
+
+  container.querySelectorAll("button[data-details-target]").forEach(button => {
+    button.addEventListener("click", () => {
+      const details = document.getElementById(button.dataset.detailsTarget);
+      if (!details) return;
+      const opening = details.hidden;
+      details.hidden = !opening;
+      details.style.display = opening ? "grid" : "none";
+      button.setAttribute("aria-expanded", String(opening));
+      button.textContent = opening ? "Ocultar ficha" : "Ver ficha completa";
+    });
+  });
+  container.querySelectorAll("button[data-open-payments]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const appointmentId = button.dataset.openPayments;
+      const panel = button.parentElement.querySelector(`[data-payments-panel="${appointmentId}"]`);
+      if (!panel) return;
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      panel.style.display = opening ? "grid" : "none";
+      button.textContent = opening ? "Ocultar pagos" : "Gestionar pagos";
+      if (opening && !panel.dataset.loaded) { panel.dataset.loaded = "true"; await mostrarPagosReserva(appointmentId, panel); }
+    });
+  });
 }
 
 async function actualizarReservasAdmin() {
@@ -740,7 +850,7 @@ function mostrarPanelAdmin(profile) {
       <p>Sesión autenticada como administradora.</p>
       <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
-        <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
+        <p style="margin:0">Lista compacta por número de casa o dirección. Abre cada ficha para consultar los datos completos; no se descargan archivos.</p>
         <button id="ccw-reservas-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar reservas</button>
         <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
         <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
