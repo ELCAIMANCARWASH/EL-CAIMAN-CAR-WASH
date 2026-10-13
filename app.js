@@ -242,6 +242,11 @@ async function mostrarCliente() {
           <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Correo (opcional)<input id="ccw-customer-email" name="customer_email" type="email" maxlength="254" autocomplete="email" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Número de casa y dirección exacta (obligatorio)
+            <input id="ccw-customer-address" name="customer_address" required minlength="2" maxlength="250" autocomplete="street-address"
+              style="display:block;width:100%;padding:12px;margin-top:5px"
+              placeholder="Ej.: Casa 12, calle principal, portón negro, junto a…">
+          </label>
           <section aria-labelledby="ccw-catalog-title" style="display:grid;gap:10px">
             <h3 id="ccw-catalog-title" style="margin:4px 0">Catálogo de servicios</h3>
             <p style="margin:0;color:#52655a">Elige primero el tipo de vehículo. Verás las tarifas confirmadas disponibles en Supabase.</p>
@@ -496,6 +501,7 @@ async function mostrarCliente() {
         customer_name: document.getElementById("ccw-customer-name").value.trim(),
         customer_phone: document.getElementById("ccw-customer-phone").value.trim(),
         customer_email: document.getElementById("ccw-customer-email").value.trim() || null,
+        customer_address: document.getElementById("ccw-customer-address").value.trim(),
         appointment_date: dateInput.value,
         requested_start_time: timeSelect.value,
         customer_notes: document.getElementById("ccw-booking-notes").value.trim() || null,
@@ -615,6 +621,7 @@ function mostrarReservasAdmin(reservas) {
       </div>
       <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
       <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
+      <div><strong>Número de casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
       <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
       <div><strong>Hora solicitada:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
       ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
