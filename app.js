@@ -412,15 +412,20 @@ if (cat === "vehiculos") return "autos";
       if (/combo\s*#?\s*\d+|polish|pulimento|encerado/.test(text)) return false;
       const tariffs = Array.isArray(s.tarifas) ? s.tarifas : [];
 return tariffs.some(t => {
-  const status = String(t.estado_precio || t.price_status || "").toLowerCase();
-  const confirmed = status === "confirmado" || status === "confirmed";
-  const reservable = t.reservable === true || confirmed;
+  const status = String(
+    t.estado_precio || t.price_status || ""
+  ).toLowerCase();
 
-  return reservable &&
+  const confirmed =
+    status === "confirmado" || status === "confirmed";
+
+  const hasValidPrice =
     t.precio !== null &&
     t.precio !== undefined &&
     Number.isFinite(Number(t.precio)) &&
-        Number(t.precio) >= 0;
+    Number(t.precio) >= 0;
+
+  return hasValidPrice && (t.reservable === true || confirmed);
 });
     });
 console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => s.name));
