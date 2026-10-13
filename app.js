@@ -413,7 +413,7 @@ async function mostrarCliente() {
     matchingServices.forEach(service => {
       const description = String(service.description || service.descripcion || "").trim();
       let label = service.name;
-      if (description) label = `${service.name} — ${description}`;
+      label = service.name;
       serviceSelect.add(new Option(label, service.id));
     });
 
