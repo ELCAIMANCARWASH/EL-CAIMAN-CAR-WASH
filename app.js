@@ -242,12 +242,35 @@ async function mostrarCliente() {
           <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Correo (opcional)<input id="ccw-customer-email" name="customer_email" type="email" maxlength="254" autocomplete="email" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Servicio y tarifa<select id="ccw-booking-tariff" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Cargando tarifas confirmadas…</option></select></label>
+          <section aria-labelledby="ccw-catalog-title" style="display:grid;gap:10px">
+            <h3 id="ccw-catalog-title" style="margin:4px 0">Catálogo de servicios</h3>
+            <p style="margin:0;color:#52655a">Elige primero el tipo de vehículo. Verás las tarifas confirmadas disponibles en Supabase.</p>
+            <div id="ccw-service-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px">
+              <p>Cargando servicios y tarifas…</p>
+            </div>
+          </section>
+          <label>Servicio y tarifa confirmada
+            <select id="ccw-booking-tariff" required style="display:block;width:100%;padding:12px;margin-top:5px">
+              <option value="">Selecciona un tipo de vehículo primero</option>
+            </select>
+          </label>
           <p id="ccw-booking-price" style="margin:0;font-weight:bold"></p>
-          <label>Marca del vehículo<input id="ccw-car-make" maxlength="80" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Modelo del vehículo<input id="ccw-car-model" maxlength="80" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Color<input id="ccw-car-color" maxlength="60" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Placa (opcional)<input id="ccw-car-plate" maxlength="30" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Tipo de vehículo
+            <select id="ccw-car-type" required style="display:block;width:100%;padding:12px;margin-top:5px">
+              <option value="">Selecciona el tipo de vehículo</option>
+              <option value="sedan">Sedán</option>
+              <option value="suv">SUV</option>
+              <option value="4x4">4x4</option>
+              <option value="pick_up">Pickup</option>
+              <option value="busito">Busito</option>
+              <option value="camioneta">Camioneta</option>
+            </select>
+          </label>
+          <label>Placa (obligatoria)
+            <input id="ccw-car-plate" name="license_plate" maxlength="30" autocomplete="off" required
+              style="display:block;width:100%;padding:12px;margin-top:5px"
+              placeholder="Ej.: ABC123">
+          </label>
           <label>Fecha solicitada<input id="ccw-booking-date" type="date" required style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Hora solicitada<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona una fecha primero</option></select></label>
           <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
@@ -271,6 +294,8 @@ async function mostrarCliente() {
   const submit = document.getElementById("ccw-submit-booking");
   const success = document.getElementById("ccw-booking-success");
   const validVehicleTypes = new Set(["sedan", "suv", "4x4", "busito", "camioneta", "pick_up"]);
+  const vehicleTypeSelect = document.getElementById("ccw-car-type");
+  const serviceCards = document.getElementById("ccw-service-cards");
   let reservableTariffs = [];
 
   // Usa fecha local de Panamá para evitar ofrecer fechas pasadas.
@@ -282,8 +307,54 @@ async function mostrarCliente() {
   function actualizarPrecio() {
     const selected = reservableTariffs[Number(tariffSelect.value)];
     priceLabel.textContent = selected
-      ? `Precio confirmado: ${formatoPrecio(Number(selected.price))} · ${selected.serviceName}`
-      : "Selecciona un servicio con tarifa confirmada.";
+      ? `Precio confirmado en Supabase: ${formatoPrecio(Number(selected.price))} · ${selected.serviceName}`
+      : "Selecciona un servicio con tarifa confirmada para este vehículo.";
+    if (serviceCards) {
+      serviceCards.querySelectorAll("[data-tariff-index]").forEach(card => {
+        const active = Number(card.dataset.tariffIndex) === Number(tariffSelect.value) && tariffSelect.value !== "";
+        card.style.borderColor = active ? "#18764e" : "#d7e1da";
+        card.style.boxShadow = active ? "0 0 0 2px #18764e22" : "none";
+      });
+    }
+  }
+
+  function actualizarCatalogoVisual() {
+    if (!serviceCards) return;
+    const vehicleType = vehicleTypeSelect.value;
+    const available = reservableTariffs
+      .map((tariff, index) => ({ ...tariff, index }))
+      .filter(tariff => !vehicleType || tariff.vehicleType === vehicleType);
+    if (!available.length) {
+      serviceCards.innerHTML = `<p style="grid-column:1/-1;background:#f4f7f5;padding:14px;border-radius:10px">No hay tarifas confirmadas para este tipo de vehículo. Consulta a la Administradora.</p>`;
+      return;
+    }
+    const grouped = new Map();
+    for (const item of available) {
+      const key = item.serviceId || item.serviceName;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(item);
+    }
+    serviceCards.innerHTML = [...grouped.values()].map(items => {
+      const item = items[0];
+      const safeName = escaparHTML(item.serviceName);
+      const desc = item.description ? `<p style="margin:8px 0;color:#52655a">${escaparHTML(item.description)}</p>` : "";
+      const prices = items.map(x => `${x.variant && x.variant !== "estandar" ? escaparHTML(x.variant) + " · " : ""}${escaparHTML(formatoPrecio(x.price))}`).join(" / ");
+      return `<article style="border:1px solid #d7e1da;border-radius:12px;padding:14px;background:white;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:16px;font-weight:bold;color:#19352a">${safeName}</div>
+        ${desc}
+        <p style="margin:0;font-weight:bold;color:#18764e">${prices}</p>
+        <button type="button" data-service-select="${items[0].index}" style="margin-top:auto;padding:11px;border:0;border-radius:8px;background:#18764e;color:white;font-weight:bold;cursor:pointer">Seleccionar servicio</button>
+      </article>`;
+    }).join("");
+    serviceCards.querySelectorAll("[data-service-select]").forEach(button => {
+      button.addEventListener("click", () => {
+        const chosen = reservableTariffs[Number(button.dataset.serviceSelect)];
+        if (!chosen) return;
+        tariffSelect.value = String(Number(button.dataset.serviceSelect));
+        actualizarPrecio();
+        tariffSelect.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
   }
 
   function actualizarHoras() {
@@ -313,6 +384,26 @@ async function mostrarCliente() {
 
   dateInput.addEventListener("change", actualizarHoras);
   tariffSelect.addEventListener("change", actualizarPrecio);
+  vehicleTypeSelect.addEventListener("change", () => {
+    const previous = reservableTariffs[Number(tariffSelect.value)];
+    tariffSelect.innerHTML = "";
+    tariffSelect.add(new Option("Selecciona servicio y tarifa", ""));
+    reservableTariffs.forEach((tariff, index) => {
+      if (tariff.vehicleType !== vehicleTypeSelect.value) return;
+      const vehicle = tariff.vehicleType.toUpperCase().replace("PICK_UP", "PICK-UP");
+      const variant = tariff.variant && tariff.variant !== "estandar" ? ` · ${tariff.variant}` : "";
+      tariffSelect.add(new Option(
+        `${tariff.serviceName} · ${vehicle}${variant} · ${formatoPrecio(tariff.price)}`,
+        String(index)
+      ));
+    });
+    if (previous && previous.vehicleType === vehicleTypeSelect.value) {
+      const idx = reservableTariffs.indexOf(previous);
+      tariffSelect.value = String(idx);
+    }
+    actualizarPrecio();
+    actualizarCatalogoVisual();
+  });
 
   try {
     message.textContent = "Cargando servicios y tarifas…";
@@ -324,6 +415,7 @@ async function mostrarCliente() {
           reservableTariffs.push({
             serviceId: service.id,
             serviceName: service.name,
+            description: service.description || service.descripcion || "",
             variant: tariff.variante,
             vehicleType: tariff.tipo_vehiculo,
             price: Number(tariff.precio)
@@ -332,19 +424,12 @@ async function mostrarCliente() {
       }
     }
     tariffSelect.innerHTML = "";
-    tariffSelect.add(new Option("Selecciona servicio y vehículo", ""));
-    reservableTariffs.forEach((tariff, index) => {
-      const vehicle = tariff.vehicleType.toUpperCase().replace("PICK_UP", "PICK-UP");
-      const variant = tariff.variant && tariff.variant !== "estandar" ? ` · ${tariff.variant}` : "";
-      tariffSelect.add(new Option(
-        `${tariff.serviceName} · ${vehicle}${variant} · ${formatoPrecio(tariff.price)}`,
-        String(index)
-      ));
-    });
+    tariffSelect.add(new Option("Selecciona un tipo de vehículo primero", ""));
     message.textContent = reservableTariffs.length
-      ? "Selecciona el servicio, la fecha y la hora solicitada."
+      ? "Selecciona el tipo de vehículo y después pulsa el servicio que deseas."
       : "No hay tarifas confirmadas disponibles para reservar en línea. Consulta a la Administradora.";
     actualizarPrecio();
+    actualizarCatalogoVisual();
     actualizarHoras();
   } catch (error) {
     message.textContent = error.message || "No se pudo cargar el catálogo.";
@@ -359,6 +444,8 @@ async function mostrarCliente() {
     try {
       const tariff = reservableTariffs[Number(tariffSelect.value)];
       if (!tariff) throw new Error("Selecciona un servicio y una tarifa confirmada.");
+      if (!vehicleTypeSelect.value) throw new Error("Selecciona el tipo de vehículo.");
+      if (!document.getElementById("ccw-car-plate").value.trim()) throw new Error("La placa es obligatoria.");
       if (!dateInput.value || !timeSelect.value) throw new Error("Selecciona fecha y hora.");
 
       const booking = {
@@ -372,10 +459,11 @@ async function mostrarCliente() {
           service_id: tariff.serviceId,
           variant: tariff.variant,
           vehicle_type: tariff.vehicleType,
-          make: document.getElementById("ccw-car-make").value.trim() || null,
-          model: document.getElementById("ccw-car-model").value.trim() || null,
-          color: document.getElementById("ccw-car-color").value.trim() || null,
-          license_plate: document.getElementById("ccw-car-plate").value.trim() || null,
+          // Se conservan las claves antiguas como null por compatibilidad con el backend.
+          make: null,
+          model: null,
+          color: null,
+          license_plate: document.getElementById("ccw-car-plate").value.trim(),
           customer_notes: null
         }]
       };
