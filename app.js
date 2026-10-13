@@ -398,27 +398,22 @@ async function mostrarCliente() {
       serviceHelp.textContent = "";
     }
 
-    let matchingServices = catalogServices.filter(s => categoriaDeServicio(s) === selectedCategory);
-
-    // Según las instrucciones de Excel, los pulimentos, recubrimientos cerámicos,
-    // restauración de faros y limpieza de conductos no forman parte de "Limpieza de autos".
-    if (selectedCategory === "autos") {
-      matchingServices = matchingServices.filter(s => {
-        const text = `${s.name || ""} ${s.description || s.descripcion || ""}`
-          .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        return !/polish|pulimento|encerado|ceramic|ceramico|recubrimiento|restauracion de faros|conductos de aire/.test(text);
-      });
-    }
+    // Catálogo público aprobado: no mostrar combos, POLISH ni servicios sin tarifas confirmadas.
+    // No se borran registros históricos; el bloqueo se aplica en la web y en el catálogo de la función.
+    let matchingServices = catalogServices.filter(s => {
+      if (categoriaDeServicio(s) !== selectedCategory) return false;
+      const text = `${s.name || ""} ${s.description || s.descripcion || ""}`
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      if (/combo\s*#?\s*\d+|polish|pulimento|encerado/.test(text)) return false;
+      const tariffs = Array.isArray(s.tarifas) ? s.tarifas : [];
+      return tariffs.some(t => t.reservable === true && t.precio !== null &&
+        Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0);
+    });
 
     matchingServices.forEach(service => {
       const description = String(service.description || service.descripcion || "").trim();
-      const normalizedName = String(service.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       let label = service.name;
-      if (selectedCategory === "autos" && /combo\s*#?\s*\d+/.test(normalizedName) && !description) {
-        label = `${service.name} — contenido no detallado; consultar antes de reservar`;
-      } else if (description) {
-        label = `${service.name} — ${description}`;
-      }
+      if (description) label = `${service.name} — ${description}`;
       serviceSelect.add(new Option(label, service.id));
     });
 
