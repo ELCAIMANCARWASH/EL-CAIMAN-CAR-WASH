@@ -297,6 +297,7 @@ async function mostrarCliente() {
   const vehicleTypeSelect = document.getElementById("ccw-car-type");
   const serviceCards = document.getElementById("ccw-service-cards");
   let reservableTariffs = [];
+  let catalogServices = [];
 
   // Usa fecha local de Panamá para evitar ofrecer fechas pasadas.
   const panamaToday = new Intl.DateTimeFormat("en-CA", {
@@ -305,7 +306,7 @@ async function mostrarCliente() {
   dateInput.min = panamaToday;
 
   function actualizarPrecio() {
-    const selected = reservableTariffs[Number(tariffSelect.value)];
+    const selected = tariffSelect.value === "" ? null : reservableTariffs[Number(tariffSelect.value)];
     priceLabel.textContent = selected
       ? `Precio confirmado en Supabase: ${formatoPrecio(Number(selected.price))} · ${selected.serviceName}`
       : "Selecciona un servicio con tarifa confirmada para este vehículo.";
@@ -321,36 +322,78 @@ async function mostrarCliente() {
   function actualizarCatalogoVisual() {
     if (!serviceCards) return;
     const vehicleType = vehicleTypeSelect.value;
-    const available = reservableTariffs
-      .map((tariff, index) => ({ ...tariff, index }))
-      .filter(tariff => !vehicleType || tariff.vehicleType === vehicleType);
-    if (!available.length) {
-      serviceCards.innerHTML = `<p style="grid-column:1/-1;background:#f4f7f5;padding:14px;border-radius:10px">No hay tarifas confirmadas para este tipo de vehículo. Consulta a la Administradora.</p>`;
+    if (!catalogServices.length) {
+      serviceCards.innerHTML = `<p style="grid-column:1/-1;background:#f4f7f5;padding:14px;border-radius:10px">No hay servicios activos disponibles en el catálogo.</p>`;
       return;
     }
-    const grouped = new Map();
-    for (const item of available) {
-      const key = item.serviceId || item.serviceName;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(item);
-    }
-    serviceCards.innerHTML = [...grouped.values()].map(items => {
-      const item = items[0];
-      const safeName = escaparHTML(item.serviceName);
-      const desc = item.description ? `<p style="margin:8px 0;color:#52655a">${escaparHTML(item.description)}</p>` : "";
-      const prices = items.map(x => `${x.variant && x.variant !== "estandar" ? escaparHTML(x.variant) + " · " : ""}${escaparHTML(formatoPrecio(x.price))}`).join(" / ");
+
+    serviceCards.innerHTML = catalogServices.map(service => {
+      const tariffs = Array.isArray(service.tarifas) ? service.tarifas : [];
+      const confirmed = tariffs.filter(t =>
+        t.reservable === true && t.precio !== null &&
+        Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0
+      );
+      const matching = confirmed.filter(t =>
+        vehicleType && t.tipo_vehiculo === vehicleType
+      );
+      const allPrices = confirmed.map(t => {
+        const variant = t.variante && t.variante !== "estandar"
+          ? `${escaparHTML(t.variante)} · ` : "";
+        const vehicle = t.tipo_vehiculo && !["no_aplica", "no_definido"].includes(t.tipo_vehiculo)
+          ? `${escaparHTML(t.tipo_vehiculo.toUpperCase().replace("PICK_UP", "PICK-UP"))} · ` : "";
+        return `${variant}${vehicle}${escaparHTML(formatoPrecio(Number(t.precio)))}`;
+      });
+      const desc = service.description
+        ? `<p style="margin:8px 0;color:#52655a">${escaparHTML(service.description)}</p>` : "";
+      let priceText = "";
+      let action = `<button type="button" disabled style="margin-top:auto;padding:11px;border:0;border-radius:8px;background:#e5e9e6;color:#52655a;font-weight:bold;cursor:not-allowed">Consultar a la Administradora</button>`;
+      let buttonIndex = "";
+
+      if (vehicleType && matching.length) {
+        priceText = matching.map(t => {
+          const variant = t.variante && t.variante !== "estandar" ? `${escaparHTML(t.variante)} · ` : "";
+          return `${variant}${escaparHTML(formatoPrecio(Number(t.precio)))}`;
+        }).join(" / ");
+        const first = matching[0];
+        const index = reservableTariffs.findIndex(t =>
+          t.serviceId === service.id &&
+          t.vehicleType === first.tipo_vehiculo &&
+          t.variant === first.variante &&
+          Number(t.price) === Number(first.precio)
+        );
+        if (index >= 0) {
+          buttonIndex = String(index);
+          action = `<button type="button" data-service-select="${index}" style="margin-top:auto;padding:11px;border:0;border-radius:8px;background:#18764e;color:white;font-weight:bold;cursor:pointer">Seleccionar servicio</button>`;
+        }
+      } else if (allPrices.length) {
+        priceText = allPrices.join(" / ");
+        if (!vehicleType && confirmed.some(t => validVehicleTypes.has(t.tipo_vehiculo))) {
+          action = `<button type="button" disabled style="margin-top:auto;padding:11px;border:0;border-radius:8px;background:#e5e9e6;color:#52655a;font-weight:bold;cursor:not-allowed">Selecciona tipo de vehículo</button>`;
+        } else {
+          priceText += " · No disponible para reservar con este tipo de vehículo";
+        }
+      } else {
+        priceText = "Precio pendiente de confirmación";
+      }
+
+      const status = matching.length
+        ? `<p style="margin:0;color:#18764e;font-size:13px">Tarifa confirmada para este vehículo</p>`
+        : `<p style="margin:0;color:#805500;font-size:13px">Requiere cotización o tarifa para otro tipo de vehículo</p>`;
       return `<article style="border:1px solid #d7e1da;border-radius:12px;padding:14px;background:white;display:flex;flex-direction:column;gap:8px">
-        <div style="font-size:16px;font-weight:bold;color:#19352a">${safeName}</div>
+        <div style="font-size:16px;font-weight:bold;color:#19352a">${escaparHTML(service.name)}</div>
         ${desc}
-        <p style="margin:0;font-weight:bold;color:#18764e">${prices}</p>
-        <button type="button" data-service-select="${items[0].index}" style="margin-top:auto;padding:11px;border:0;border-radius:8px;background:#18764e;color:white;font-weight:bold;cursor:pointer">Seleccionar servicio</button>
+        <p style="margin:0;font-weight:bold;color:${matching.length ? "#18764e" : "#805500"}">${priceText}</p>
+        ${status}
+        ${action}
       </article>`;
     }).join("");
+
     serviceCards.querySelectorAll("[data-service-select]").forEach(button => {
       button.addEventListener("click", () => {
-        const chosen = reservableTariffs[Number(button.dataset.serviceSelect)];
-        if (!chosen) return;
-        tariffSelect.value = String(Number(button.dataset.serviceSelect));
+        const index = Number(button.dataset.serviceSelect);
+        const chosen = reservableTariffs[index];
+        if (!chosen || chosen.vehicleType !== vehicleTypeSelect.value) return;
+        tariffSelect.value = String(index);
         actualizarPrecio();
         tariffSelect.scrollIntoView({ behavior: "smooth", block: "center" });
       });
@@ -408,6 +451,7 @@ async function mostrarCliente() {
   try {
     message.textContent = "Cargando servicios y tarifas…";
     const catalogo = await cargarCatalogoPublico();
+    catalogServices = catalogo;
     for (const service of catalogo) {
       for (const tariff of (service.tarifas || [])) {
         if (tariff.reservable === true && Number.isFinite(Number(tariff.precio)) &&
