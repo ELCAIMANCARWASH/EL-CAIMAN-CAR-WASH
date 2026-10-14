@@ -267,9 +267,8 @@ async function mostrarCliente() {
                 <option value="sedan">Sedán</option>
                 <option value="suv">SUV</option>
                 <option value="4x4">4x4</option>
-                <option value="pick_up">Pickup</option>
+                <option value="pickup">Pickup</option>
                 <option value="busito">Busito</option>
-                <option value="camioneta">Camioneta</option>
               </select>
             </label>
             <label>Servicio
@@ -314,7 +313,7 @@ async function mostrarCliente() {
   const message = document.getElementById("ccw-booking-message");
   const submit = document.getElementById("ccw-submit-booking");
   const success = document.getElementById("ccw-booking-success");
-  const validVehicleTypes = new Set(["sedan", "suv", "4x4", "busito", "camioneta", "pick_up"]);
+  const validVehicleTypes = new Set(["sedan", "suv", "4x4", "busito", "pickup"]);
   const vehicleTypeSelect = document.getElementById("ccw-car-type");
   const categorySelect = document.getElementById("ccw-service-category");
   const serviceSelect = document.getElementById("ccw-service-option");
@@ -477,7 +476,11 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
     allTariffs = [];
 
     const matching = rawTariffs.filter(t => {
-      if (vehicleCategory) return vehicleType && t.tipo_vehiculo === vehicleType;
+      if (vehicleCategory) {
+        const catalogVehicleType = String(t.tipo_vehiculo || "").toLowerCase();
+        const canonicalCatalogType = catalogVehicleType === "pick_up" ? "pickup" : catalogVehicleType;
+        return vehicleType && canonicalCatalogType === vehicleType;
+      }
       return !validVehicleTypes.has(t.tipo_vehiculo);
     });
 
@@ -486,11 +489,11 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
         serviceId: selectedService.id,
         serviceName: selectedService.name,
         variant: t.variante || "estandar",
-        vehicleType: t.tipo_vehiculo,
+        vehicleType: (String(t.tipo_vehiculo || "").toLowerCase() === "pick_up" ? "pickup" : String(t.tipo_vehiculo || "").toLowerCase()),
         price: Number(t.precio),
         isVehicle: vehicleCategory
       }) - 1;
-      const vehicleLabel = vehicleCategory ? ` · ${vehicleType.toUpperCase().replace("PICK_UP", "PICKUP")}` : "";
+      const vehicleLabel = vehicleCategory ? ` · ${vehicleType.toUpperCase()}` : "";
       const variantLabel = t.variante && t.variante !== "estandar" ? `${t.variante}` : selectedService.name;
       tariffSelect.add(new Option(`${variantLabel}${vehicleLabel} · ${formatoPrecio(Number(t.precio))}`, String(index)));
     });
@@ -606,14 +609,8 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
         body: JSON.stringify({ action: "crear_reserva", reserva: booking })
       });
       const data = await response.json().catch(() => ({}));
-      // El backend puede confirmar la reserva sin repetir "ok: true" dentro de data.reserva.
-      // Solo tratarla como fallida ante un HTTP fallido o una negativa explícita.
-      if (!response.ok || data.ok === false || data.reserva?.ok === false) {
+      if (!response.ok || data.ok !== true || data.reserva?.ok !== true) {
         throw new Error(data.error || data.reserva?.error || "No se pudo confirmar la cita. Prueba otra hora o fecha.");
-      }
-      const bookingCode = data.reserva?.booking_code || data.booking_code;
-      if (data.ok !== true && !bookingCode) {
-        throw new Error(data.error || data.reserva?.error || "El servidor no confirmó el resultado. Consulta antes de volver a enviar la reserva.");
       }
 
       // Nunca mostrar ni guardar lookup_secret en la página.
@@ -622,7 +619,7 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
       success.innerHTML = `
         <h3 style="margin-top:0">¡Solicitud confirmada!</h3>
         <p>Tu código de reserva es:</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(bookingCode || "")}</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.reserva.booking_code || "")}</p>
         <p>Fecha: ${escaparHTML(data.reserva.appointment_date || booking.appointment_date)}</p>
         <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
         <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
