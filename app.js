@@ -692,19 +692,22 @@ function mostrarReservasAdmin(reservas) {
     return;
   }
   container.innerHTML = reservas.map(r => `
-    <article style="background:#fff;border:1px solid #d8e2dc;border-radius:10px;padding:12px 14px;display:grid;gap:5px;overflow-wrap:anywhere;box-shadow:0 2px 7px rgba(16,37,29,.06)">
-      <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;align-items:center;border-bottom:1px solid #edf1ee;padding-bottom:8px;margin-bottom:2px">
-        <strong style="font-size:15px;letter-spacing:.2px">${escaparHTML(r.booking_code || "Sin código")}</strong>
-        <span style="display:inline-block;background:#edf5ef;color:#24563d;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700">${escaparHTML(r.status || "sin estado")}</span>
+    <article class="ccw-reserva-card" style="background:#fff;border:1px solid #d8e2dc;border-radius:8px;padding:8px 10px;display:grid;gap:3px;overflow-wrap:anywhere;box-shadow:none;font-size:12px;line-height:1.3;max-width:100%;box-sizing:border-box">
+      <div style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap;align-items:center;border-bottom:1px solid #edf1ee;padding-bottom:5px;margin-bottom:2px">
+        <strong style="font-size:13px;letter-spacing:.1px">${escaparHTML(r.booking_code || "Sin código")}</strong>
+        <span style="display:inline-block;background:#edf5ef;color:#24563d;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700">${escaparHTML(r.status || "sin estado")}</span>
       </div>
-      <div style="font-size:13px;line-height:1.45"><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
-      <div style="font-size:13px;line-height:1.45"><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
-      <div style="font-size:13px;line-height:1.45"><strong>Casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
-      <div style="font-size:13px;line-height:1.45"><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")} <span style="margin-left:8px"><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));column-gap:10px;row-gap:3px">
+        <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
+        <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
+        <div style="grid-column:1/-1"><strong>Casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
+        <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
+        <div><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
+      </div>
       ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
-        <div style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:3px;display:grid;gap:4px;font-size:13px;line-height:1.45">
-          <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
-          <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
+        <div style="border-top:1px solid #edf1ee;padding-top:5px;margin-top:3px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));column-gap:10px;row-gap:3px;font-size:12px;line-height:1.3">
+          <div style="grid-column:1/-1"><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
+          <div><strong>Horario:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
           <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
           <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
           <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
@@ -739,7 +742,7 @@ function mostrarPanelAdmin(profile) {
       <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
         <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
-        <button id="ccw-reservas-refresh" type="button" style="display:block;width:100%;padding:11px 14px;background:#18764e;color:white;border:0;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Actualizar reservas</button>
+        <button id="ccw-reservas-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar reservas</button>
         <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
         <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
       </section>
@@ -749,8 +752,8 @@ function mostrarPanelAdmin(profile) {
       </select>
       ${boton("Generar PIN de hoy", "ccw-generate-pin")}
       <p id="ccw-pin-message" role="status"></p>
-      <button id="ccw-logout" type="button" style="display:block;width:100%;padding:11px 14px;background:#fff;color:#24563d;border:1px solid #b9c9bf;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Cerrar sesión</button>
-      <button id="ccw-home" type="button" style="display:block;width:100%;padding:11px 14px;background:#fff;color:#24563d;border:1px solid #b9c9bf;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Volver al inicio</button>
+      <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
+      <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
     </main>`;
 
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
