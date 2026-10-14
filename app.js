@@ -112,6 +112,16 @@ async function generarPinLavador(washerId) {
   return data;
 }
 
+
+async function llamarAdminLavador(body) {
+  const token = sessionStorage.getItem("ccw_access_token");
+  if (!token) throw new Error("Inicia sesión como administradora primero.");
+  const response = await fetch(ACCESS_FUNCTION, { method: "POST", headers: { ...headers, Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "No se pudo completar la operación.");
+  return data;
+}
+
 function escaparHTML(value) {
   return String(value).replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;",
@@ -792,6 +802,51 @@ async function activarNotificacionesAdmin() {
   }
 }
 
+async function cargarLavadoresAdmin() {
+  const msg = document.getElementById("ccw-washers-message");
+  const list = document.getElementById("ccw-washers-list");
+  try {
+    const result = await llamarAdminLavador({ action: "list_washers" });
+    const washers = result.washers || [];
+    list.innerHTML = washers.map(w => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px;display:grid;gap:6px"><strong>${escaparHTML(w.full_name)}</strong><span>Estado: ${escaparHTML(w.status)} · Ingreso: ${escaparHTML(w.hired_at || "—")}</span>${w.deactivated_at ? `<span>Desactivado: ${escaparHTML(w.deactivated_at)}</span>` : `<button type="button" data-deactivate-washer="${escaparHTML(w.id)}" style="padding:8px">Desactivar conservando historial</button>`}</div>`).join("") || "No hay lavadores registrados.";
+    list.querySelectorAll("[data-deactivate-washer]").forEach(btn => btn.onclick = async () => { if (!confirm("¿Desactivar este lavador? Su historial se conservará.")) return; try { await llamarAdminLavador({ action: "deactivate_washer", washer_id: btn.dataset.deactivateWasher }); msg.textContent = "Lavador desactivado."; await cargarLavadoresAdmin(); } catch(e) { msg.textContent = e.message; } });
+    const active = washers.filter(w => w.status === "activo");
+    const selector = document.getElementById("ccw-washer");
+    const previous = selector.value;
+    selector.innerHTML = active.map(w => `<option value="${escaparHTML(w.id)}">${escaparHTML(w.full_name)}</option>`).join("");
+    if (active.some(w => w.id === previous)) selector.value = previous;
+    const planList = document.getElementById("ccw-plan-washer-list");
+    planList.innerHTML = active.map(w => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px;display:grid;gap:8px"><label><input type="checkbox" data-plan-washer="${escaparHTML(w.id)}" checked> ${escaparHTML(w.full_name)} disponible</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label>Desde<input type="time" data-plan-start="${escaparHTML(w.id)}" value="07:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label><label>Hasta<input type="time" data-plan-end="${escaparHTML(w.id)}" value="18:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label></div></div>`).join("") || "Registra primero un lavador.";
+    msg.textContent = `${washers.length} lavador(es) registrados.`;
+  } catch(e) { msg.textContent = e.message; }
+}
+
+async function publicarJornadaAdmin() {
+  const msg = document.getElementById("ccw-plan-message");
+  const button = document.getElementById("ccw-publish-plan"); button.disabled = true;
+  try {
+    const availability = [...document.querySelectorAll("[data-plan-washer]")].map(box => ({
+      washer_id: box.dataset.planWasher,
+      available: box.checked,
+      start_time: document.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`).value,
+      end_time: document.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`).value,
+      absence_reason: box.checked ? null : "No disponible"
+    }));
+    if (!availability.some(a => a.available)) throw new Error("Selecciona al menos un lavador disponible.");
+    const result = await llamarAdminLavador({ action: "publish_plan", plan_date: document.getElementById("ccw-plan-date").value, opening_time: document.getElementById("ccw-plan-open").value, closing_time: document.getElementById("ccw-plan-close").value, notes: document.getElementById("ccw-plan-notes").value, availability });
+    msg.textContent = result.message || "Jornada publicada correctamente.";
+    await cargarJornadasAdmin();
+  } catch(e) { msg.textContent = e.message; } finally { button.disabled = false; }
+}
+
+async function cargarJornadasAdmin() {
+  const list = document.getElementById("ccw-plans-list"); const msg = document.getElementById("ccw-plan-message");
+  try {
+    const result = await llamarAdminLavador({ action: "list_plans" });
+    list.innerHTML = (result.plans || []).map(p => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px"><strong>${escaparHTML(p.plan_date)}</strong><div>${escaparHTML(String(p.opening_time).slice(0,5))}–${escaparHTML(String(p.closing_time).slice(0,5))}</div><div>${p.published_at ? "Publicada" : "Borrador"}</div>${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}</div>`).join("") || "No hay jornadas registradas.";
+  } catch(e) { msg.textContent = e.message; }
+}
+
 function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
@@ -812,6 +867,24 @@ function mostrarPanelAdmin(profile) {
         <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
         <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
       </section>
+      <section style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Registro de lavadores</h3>
+        <label>Nombre completo<input id="ccw-new-washer-name" maxlength="120" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
+        <label>Fecha de ingreso<input id="ccw-new-washer-date" type="date" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
+        <label>Observaciones<textarea id="ccw-new-washer-notes" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></textarea></label>
+        <button id="ccw-create-washer" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Registrar lavador</button>
+        <button id="ccw-refresh-washers" type="button" style="padding:12px">Actualizar lista de lavadores</button>
+        <p id="ccw-washers-message" role="status"></p><div id="ccw-washers-list" style="display:grid;gap:8px"></div>
+      </section>
+      <section style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Jornadas y disponibilidad</h3>
+        <label>Fecha de la jornada<input id="ccw-plan-date" type="date" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Apertura<input id="ccw-plan-open" type="time" value="07:00" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label><label>Cierre<input id="ccw-plan-close" type="time" value="18:00" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label></div>
+        <label>Notas<textarea id="ccw-plan-notes" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></textarea></label>
+        <p>Marca los lavadores disponibles y establece su horario individual.</p><div id="ccw-plan-washer-list" style="display:grid;gap:10px"></div>
+        <button id="ccw-publish-plan" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Publicar jornada</button>
+        <p id="ccw-plan-message" role="status"></p><button id="ccw-refresh-plans" type="button" style="padding:12px">Consultar jornadas publicadas</button><div id="ccw-plans-list" style="display:grid;gap:8px"></div>
+      </section>
       <label for="ccw-washer">Seleccionar lavador</label>
       <select id="ccw-washer" style="padding:12px">
         <option value="${WASHER_ID}">Pedro</option>
@@ -821,6 +894,21 @@ function mostrarPanelAdmin(profile) {
       <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
       <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
     </main>`;
+
+  const hoyLocal = new Date();
+  const fechaLocal = new Date(hoyLocal.getTime() - hoyLocal.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  document.getElementById("ccw-new-washer-date").value = fechaLocal;
+  document.getElementById("ccw-plan-date").value = fechaLocal;
+  document.getElementById("ccw-create-washer").onclick = async () => {
+    const msg = document.getElementById("ccw-washers-message");
+    const name = document.getElementById("ccw-new-washer-name").value.trim();
+    if (!name) { msg.textContent = "Escribe el nombre del lavador."; return; }
+    try { await llamarAdminLavador({ action: "create_washer", full_name: name, hired_at: document.getElementById("ccw-new-washer-date").value || fechaLocal, notes: document.getElementById("ccw-new-washer-notes").value }); document.getElementById("ccw-new-washer-name").value = ""; document.getElementById("ccw-new-washer-notes").value = ""; msg.textContent = "Lavador registrado."; await cargarLavadoresAdmin(); } catch(e) { msg.textContent = e.message; }
+  };
+  document.getElementById("ccw-refresh-washers").onclick = cargarLavadoresAdmin;
+  document.getElementById("ccw-publish-plan").onclick = publicarJornadaAdmin;
+  document.getElementById("ccw-refresh-plans").onclick = cargarJornadasAdmin;
+  cargarLavadoresAdmin(); cargarJornadasAdmin();
 
   document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
