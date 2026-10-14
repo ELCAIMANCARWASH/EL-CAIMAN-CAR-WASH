@@ -2,7 +2,6 @@
 const SUPABASE_URL = "https://adsgjmybppdacdndrqsf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB";
 const WASHER_ID = "711080b4-ff5a-44f9-88de-e840a93294d5";
-const VAPID_PUBLIC_KEY = "BKgvzZqkP_yEyQTUkVzDac6I2dZVIai3FTvxbTVjp-thttnSxfk65arLDAmSKZjKwLutlfaZ4oNF7c54pjoJcU4";
 const ACCESS_FUNCTION = `${SUPABASE_URL}/functions/v1/gestionar-acceso-lavador`;
 
 const headers = {
@@ -693,18 +692,17 @@ function mostrarReservasAdmin(reservas) {
     return;
   }
   container.innerHTML = reservas.map(r => `
-    <article style="background:#fff;border:1px solid #d7e1da;border-radius:12px;padding:15px;display:grid;gap:7px;overflow-wrap:anywhere">
-      <div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:center">
-        <strong style="font-size:18px">${escaparHTML(r.booking_code || "Sin código")}</strong>
-        <span style="background:#eaf4ed;padding:5px 9px;border-radius:20px">${escaparHTML(r.status || "sin estado")}</span>
+    <article style="background:#fff;border:1px solid #d8e2dc;border-radius:10px;padding:12px 14px;display:grid;gap:5px;overflow-wrap:anywhere;box-shadow:0 2px 7px rgba(16,37,29,.06)">
+      <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;align-items:center;border-bottom:1px solid #edf1ee;padding-bottom:8px;margin-bottom:2px">
+        <strong style="font-size:15px;letter-spacing:.2px">${escaparHTML(r.booking_code || "Sin código")}</strong>
+        <span style="display:inline-block;background:#edf5ef;color:#24563d;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700">${escaparHTML(r.status || "sin estado")}</span>
       </div>
-      <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
-      <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
-      <div><strong>Número de casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
-      <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
-      <div><strong>Hora solicitada:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
+      <div style="font-size:13px;line-height:1.45"><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
+      <div style="font-size:13px;line-height:1.45"><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
+      <div style="font-size:13px;line-height:1.45"><strong>Casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
+      <div style="font-size:13px;line-height:1.45"><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")} <span style="margin-left:8px"><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</span></div>
       ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
-        <div style="border-top:1px solid #e3e9e5;padding-top:8px;margin-top:4px">
+        <div style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:3px;display:grid;gap:4px;font-size:13px;line-height:1.45">
           <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
           <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
           <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
@@ -713,7 +711,6 @@ function mostrarReservasAdmin(reservas) {
         </div>`).join("") : ""}
     </article>`).join("");
 }
-
 async function actualizarReservasAdmin() {
   const message = document.getElementById("ccw-reservas-message");
   const button = document.getElementById("ccw-reservas-refresh");
@@ -732,51 +729,6 @@ async function actualizarReservasAdmin() {
   }
 }
 
-function base64UrlToUint8Array(base64String) {
-  const padding = "=".repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  return Uint8Array.from([...raw].map(char => char.charCodeAt(0)));
-}
-
-async function activarNotificacionesAdmin() {
-  const output = document.getElementById("ccw-push-message");
-  const button = document.getElementById("ccw-push-enable");
-  button.disabled = true;
-  output.textContent = "Activando notificaciones…";
-  try {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      throw new Error("Este navegador no admite notificaciones push. En iPhone, abre la app desde su icono de la pantalla de inicio.");
-    }
-    if (!window.isSecureContext) throw new Error("Abre el sitio mediante HTTPS.");
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("No se concedió permiso para notificaciones.");
-    const registration = await navigator.serviceWorker.register("./sw.js");
-    await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY)
-      });
-    }
-    const token = sessionStorage.getItem("ccw_access_token");
-    if (!token) throw new Error("La sesión caducó. Cierra sesión y vuelve a entrar.");
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/notificaciones`, {
-      method: "POST",
-      headers: { ...headers, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ action: "registrar_dispositivo", subscription: subscription.toJSON() })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "No se pudo registrar este iPhone en Supabase.");
-    output.textContent = "Notificaciones activadas en este dispositivo.";
-  } catch (error) {
-    output.textContent = error.message || "No se pudieron activar las notificaciones.";
-  } finally {
-    button.disabled = false;
-  }
-}
-
 function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
@@ -784,16 +736,10 @@ function mostrarPanelAdmin(profile) {
     <main style="max-width:620px;margin:32px auto;padding:20px;display:grid;gap:14px">
       <h2>Bienvenida, ${escaparHTML(profile.full_name || "Administradora")}</h2>
       <p>Sesión autenticada como administradora.</p>
-      <section style="display:grid;gap:10px;background:#fff8e8;border-radius:12px;padding:16px">
-        <h3 style="margin:0">Notificaciones en este iPhone</h3>
-        <p style="margin:0">Activa las alertas de nuevas reservas en este dispositivo.</p>
-        <button id="ccw-push-enable" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Activar notificaciones</button>
-        <p id="ccw-push-message" role="status" style="margin:0"></p>
-      </section>
       <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
         <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
-        <button id="ccw-reservas-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar reservas</button>
+        <button id="ccw-reservas-refresh" type="button" style="display:block;width:100%;padding:11px 14px;background:#18764e;color:white;border:0;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Actualizar reservas</button>
         <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
         <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
       </section>
@@ -803,11 +749,10 @@ function mostrarPanelAdmin(profile) {
       </select>
       ${boton("Generar PIN de hoy", "ccw-generate-pin")}
       <p id="ccw-pin-message" role="status"></p>
-      <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
-      <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
+      <button id="ccw-logout" type="button" style="display:block;width:100%;padding:11px 14px;background:#fff;color:#24563d;border:1px solid #b9c9bf;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Cerrar sesión</button>
+      <button id="ccw-home" type="button" style="display:block;width:100%;padding:11px 14px;background:#fff;color:#24563d;border:1px solid #b9c9bf;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer">Volver al inicio</button>
     </main>`;
 
-  document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
   actualizarReservasAdmin();
 
