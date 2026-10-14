@@ -2,6 +2,7 @@
 const SUPABASE_URL = "https://adsgjmybppdacdndrqsf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB";
 const WASHER_ID = "711080b4-ff5a-44f9-88de-e840a93294d5";
+const VAPID_PUBLIC_KEY = "BKgvzZqkP_yEyQTUkVzDac6I2dZVIai3FTvxbTVjp-thttnSxfk65arLDAmSKZjKwLutlfaZ4oNF7c54pjoJcU4";
 const ACCESS_FUNCTION = `${SUPABASE_URL}/functions/v1/gestionar-acceso-lavador`;
 
 const headers = {
@@ -743,6 +744,51 @@ async function actualizarReservasAdmin() {
   }
 }
 
+function base64UrlToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(char => char.charCodeAt(0)));
+}
+
+async function activarNotificacionesAdmin() {
+  const output = document.getElementById("ccw-push-message");
+  const button = document.getElementById("ccw-push-enable");
+  button.disabled = true;
+  output.textContent = "Activando notificaciones…";
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      throw new Error("Este navegador no admite notificaciones push. En iPhone, abre la app desde su icono de la pantalla de inicio.");
+    }
+    if (!window.isSecureContext) throw new Error("Abre el sitio mediante HTTPS.");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") throw new Error("No se concedió permiso para notificaciones.");
+    const registration = await navigator.serviceWorker.register("./sw.js");
+    await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    const token = sessionStorage.getItem("ccw_access_token");
+    if (!token) throw new Error("La sesión caducó. Cierra sesión y vuelve a entrar.");
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/notificaciones`, {
+      method: "POST",
+      headers: { ...headers, Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: "registrar_dispositivo", subscription: subscription.toJSON() })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "No se pudo registrar este iPhone en Supabase.");
+    output.textContent = "Notificaciones activadas en este dispositivo.";
+  } catch (error) {
+    output.textContent = error.message || "No se pudieron activar las notificaciones.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
@@ -750,6 +796,12 @@ function mostrarPanelAdmin(profile) {
     <main style="max-width:620px;margin:32px auto;padding:20px;display:grid;gap:14px">
       <h2>Bienvenida, ${escaparHTML(profile.full_name || "Administradora")}</h2>
       <p>Sesión autenticada como administradora.</p>
+      <section style="display:grid;gap:10px;background:#fff8e8;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Notificaciones en este iPhone</h3>
+        <p style="margin:0">Activa las alertas de nuevas reservas en este dispositivo.</p>
+        <button id="ccw-push-enable" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Activar notificaciones</button>
+        <p id="ccw-push-message" role="status" style="margin:0"></p>
+      </section>
       <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
         <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
@@ -767,6 +819,7 @@ function mostrarPanelAdmin(profile) {
       <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
     </main>`;
 
+  document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
   actualizarReservasAdmin();
 
