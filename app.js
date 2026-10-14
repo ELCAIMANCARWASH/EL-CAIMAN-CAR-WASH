@@ -691,28 +691,39 @@ function mostrarReservasAdmin(reservas) {
     container.innerHTML = '<p class="notice">No hay reservas registradas.</p>';
     return;
   }
-  container.innerHTML = reservas.map(r => `
-    <article class="ccw-reserva-card" style="background:#fff;border:1px solid #d8e2dc;border-radius:8px;padding:8px 10px;display:grid;gap:3px;overflow-wrap:anywhere;box-shadow:none;font-size:12px;line-height:1.3;max-width:100%;box-sizing:border-box">
-      <div style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap;align-items:center;border-bottom:1px solid #edf1ee;padding-bottom:5px;margin-bottom:2px">
-        <strong style="font-size:13px;letter-spacing:.1px">${escaparHTML(r.booking_code || "Sin código")}</strong>
-        <span style="display:inline-block;background:#edf5ef;color:#24563d;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700">${escaparHTML(r.status || "sin estado")}</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));column-gap:10px;row-gap:3px">
-        <div><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</div>
-        <div><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</div>
-        <div style="grid-column:1/-1"><strong>Casa / dirección:</strong> ${escaparHTML(r.customer_address || r.house_number || r.address || "No registrado en la reserva")}</div>
-        <div><strong>Fecha:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
-        <div><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</div>
-      </div>
-      ${Array.isArray(r.vehicles) ? r.vehicles.map(v => `
-        <div style="border-top:1px solid #edf1ee;padding-top:5px;margin-top:3px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));column-gap:10px;row-gap:3px;font-size:12px;line-height:1.3">
-          <div style="grid-column:1/-1"><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
-          <div><strong>Horario:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
-          <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
-          <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
-          <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
-        </div>`).join("") : ""}
-    </article>`).join("");
+  container.innerHTML = reservas.map(r => {
+    const address = r.customer_address || r.house_number || r.address || "No registrado";
+    const vehicles = Array.isArray(r.vehicles) ? r.vehicles : [];
+    return `
+      <details style="background:#fff;border:1px solid #d8e2dc;border-radius:8px;padding:0 12px;margin:0 0 8px;overflow-wrap:anywhere;box-shadow:none;font-size:13px;line-height:1.35">
+        <summary style="list-style:none;cursor:pointer;padding:10px 0;display:grid;gap:5px">
+          <span style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <strong style="font-size:13px;color:#173b2c">${escaparHTML(r.booking_code || "Reserva")}</strong>
+            <span style="background:#edf5ef;color:#24563d;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700;white-space:nowrap">${escaparHTML(r.status || "sin estado")}</span>
+          </span>
+          <span style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3px 12px">
+            <span><strong>Casa:</strong> ${escaparHTML(address)}</span>
+            <span><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</span>
+            <span style="grid-column:1/-1"><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</span>
+            <span style="grid-column:1/-1"><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</span>
+          </span>
+          <span style="font-size:11px;color:#28724f;font-weight:700;padding-top:2px">＋ Ver ficha completa</span>
+        </summary>
+        <div style="border-top:1px solid #e5ece7;padding:9px 0 11px;display:grid;gap:6px">
+          <div><strong>Fecha de la reserva:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
+          <div><strong>Dirección completa:</strong> ${escaparHTML(address)}</div>
+          ${vehicles.length ? vehicles.map(v => `
+            <section style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:2px;display:grid;gap:4px">
+              <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
+              <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
+              <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+              <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
+              <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
+            </section>`).join("") : '<div>Detalles de servicio no disponibles.</div>'}
+          <div style="font-size:11px;color:#28724f;font-weight:700;padding-top:2px">− Cerrar ficha</div>
+        </div>
+      </details>`;
+  }).join("");
 }
 async function actualizarReservasAdmin() {
   const message = document.getElementById("ccw-reservas-message");
