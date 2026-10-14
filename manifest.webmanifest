@@ -1,0 +1,12 @@
+{
+  "name": "EL CAIMAN CAR WASH",
+  "short_name": "CAIMAN CAR WASH",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f4",
+  "theme_color": "#10251d",
+  "icons": [
+    { "src": "./logo.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

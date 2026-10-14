@@ -1,29 +1,87 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#10251d">
-  <meta name="description" content="EL CAIMAN CAR WASH: reservas y atención de servicios de limpieza.">
+  <link rel="manifest" href="./manifest.webmanifest">
   <title>EL CAIMAN CAR WASH</title>
   <style>
     * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
-    body { margin: 0; min-height: 100vh; background: #f4f7f5; color: #183126; font-family: Arial, sans-serif; }
-    .initial-header { background: #10251d; color: white; text-align: center; padding: 18px 12px; }
-    .initial-header img { display:block; width:min(85%,260px); height:auto; max-height:210px; object-fit:contain; margin:0 auto 12px; border-radius:10px; }
-    .initial-header h1 { margin:0 0 8px; font-size:clamp(20px,4vw,28px); line-height:1.2; }
-    #app-loading { max-width: 600px; margin: 28px auto; padding: 20px; text-align: center; }
-    @media (max-width: 640px) { #app-loading { margin: 12px auto; padding: 14px; } }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f6f4; color: #19352a; }
+    
+.site-header {
+  background: #10251d;
+  color: white;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.site-logo {
+  display: block;
+  width: min(90%, 260px);
+  height: auto;
+  max-height: 210px;
+  object-fit: contain;
+  margin: 0 auto 14px;
+  border-radius: 12px;
+}
+
+.site-header h1 {
+  margin: 0;
+  font-size: clamp(20px, 4vw, 28px);
+  overflow-wrap: anywhere;
+}
+
+.site-header p {
+  margin: 8px 0 0;
+  color: #d2e4d9;
+}
+
+@media (max-width: 480px) {
+  .site-header {
+    padding: 16px 12px;
+  }
+
+  .site-logo {
+    width: min(85%, 220px);
+    max-height: 170px;
+    margin-bottom: 10px;
+  }
+}
+
+    main { width: min(92%, 650px); margin: 35px auto; }
+    .card { background: white; padding: 26px; border-radius: 16px; box-shadow: 0 5px 20px #19352a12; }
+    h2 { margin-top: 0; }
+    .intro { line-height: 1.6; }
+    .button { display: block; width: 100%; padding: 15px; border: 0; border-radius: 9px; background: #19734a; color: white; font-size: 16px; font-weight: bold; text-align: center; text-decoration: none; cursor: pointer; margin-top: 18px; }
+    .secondary { background: white; color: #19734a; border: 1px solid #19734a; }
+    .notice { background: #edf5ef; border-radius: 10px; padding: 14px; font-size: 14px; line-height: 1.5; }
+    footer { text-align: center; color: #64756c; font-size: 13px; padding: 20px; }
   </style>
 </head>
 <body>
-  <header class="initial-header">
-    <img src="./logo.png?v=2" alt="Logo de EL CAIMAN CAR WASH" width="1200" height="800">
-    <h1>EL CAIMAN CAR WASH</h1>
-    <p>Lavado profesional · Reservas y atención</p>
-  </header>
-  <main id="app-loading" role="status">Cargando la aplicación…</main>
-  <script type="module" src="./app.js?v=4"></script>
+  
+<header class="site-header">
+  <img
+    class="site-logo"
+    src="./logo.png"
+    alt="Logo de EL CAIMAN CAR WASH"
+    width="1200"
+    height="800"
+  >
+  <h1>EL CAIMAN CAR WASH</h1>
+  <p>Tu vehículo, en buenas manos</p>
+</header>
+
+  <main>
+    <section class="card">
+      <h2>Bienvenido</h2>
+      <p class="intro">Estamos cargando el sistema de reservas. En unos segundos podrás seleccionar el servicio y solicitar una cita.</p>
+      <div class="notice">Si el sistema no carga, actualiza la página. Los horarios se confirman según la disponibilidad publicada.</div>
+    </section>
+  </main>
+  <footer>EL CAIMAN CAR WASH · Sistema de reservas</footer>
+  <script type="module" src="./app.js?v=5"></script>
 </body>
 </html>
