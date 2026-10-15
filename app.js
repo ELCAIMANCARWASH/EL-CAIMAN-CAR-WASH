@@ -851,10 +851,56 @@ async function cargarLavadoresAdmin() {
     selector.innerHTML = active.map(w => `<option value="${escaparHTML(w.id)}">${escaparHTML(w.full_name)}</option>`).join("");
     if (active.some(w => w.id === previous)) selector.value = previous;
     const planList = document.getElementById("ccw-plan-washer-list");
+    // Renderiza el formulario; luego carga el estado real guardado para la fecha elegida.
     planList.innerHTML = active.map(w => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px;display:grid;gap:8px"><label><input type="checkbox" data-plan-washer="${escaparHTML(w.id)}" checked> ${escaparHTML(w.full_name)} disponible</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label>Desde<input type="time" data-plan-start="${escaparHTML(w.id)}" value="07:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label><label>Hasta<input type="time" data-plan-end="${escaparHTML(w.id)}" value="18:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label></div></div>`).join("") || "Registra primero un lavador.";
     msg.textContent = `${washers.length} lavador(es) registrados.`;
+    await cargarDisponibilidadJornadaAdmin();
     if (document.getElementById("ccw-reservas-lista")) await actualizarReservasAdmin();
   } catch(e) { msg.textContent = e.message; }
+}
+
+async function cargarDisponibilidadJornadaAdmin() {
+  const msg = document.getElementById("ccw-plan-message");
+  const dateInput = document.getElementById("ccw-plan-date");
+  const planList = document.getElementById("ccw-plan-washer-list");
+  const planDate = dateInput?.value;
+  if (!planDate || !planList) return;
+
+  try {
+    const result = await llamarAdminLavador({ action: "get_plan_availability", plan_date: planDate });
+    // Si no hay jornada guardada para esa fecha, se conserva el formulario inicial.
+    if (!result.plan) {
+      // Fecha nueva: valores iniciales explícitos, sin reutilizar datos de otra fecha.
+      for (const box of planList.querySelectorAll("[data-plan-washer]")) {
+        box.checked = true;
+        const start = planList.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`);
+        const end = planList.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`);
+        if (start) start.value = "07:00";
+        if (end) end.value = "18:00";
+      }
+      if (msg) msg.textContent = "Fecha sin jornada guardada. Se muestran los valores iniciales; confirma la disponibilidad antes de publicar.";
+      return;
+    }
+
+    const saved = new Map((result.availability || []).map(row => [row.washer_id, row]));
+    for (const box of planList.querySelectorAll("[data-plan-washer]")) {
+      const row = saved.get(box.dataset.planWasher);
+      if (!row) {
+        box.checked = false;
+        continue;
+      }
+      box.checked = row.available === true;
+      const start = planList.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`);
+      const end = planList.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`);
+      if (start && row.start_time) start.value = String(row.start_time).slice(0, 5);
+      if (end && row.end_time) end.value = String(row.end_time).slice(0, 5);
+    }
+    if (msg) msg.textContent = `Disponibilidad guardada cargada para ${planDate}. Revisa los lavadores antes de publicar.`;
+  } catch (error) {
+    if (msg) msg.textContent = `No se pudo cargar la disponibilidad guardada: ${error.message}. No publiques hasta verificarla.`;
+    // Evita presentar como confirmados datos que no se pudieron recuperar.
+    for (const box of planList.querySelectorAll("[data-plan-washer]")) box.checked = false;
+  }
 }
 
 async function publicarJornadaAdmin() {
@@ -945,6 +991,7 @@ function mostrarPanelAdmin(profile) {
   document.getElementById("ccw-refresh-washers").onclick = cargarLavadoresAdmin;
   document.getElementById("ccw-publish-plan").onclick = publicarJornadaAdmin;
   document.getElementById("ccw-refresh-plans").onclick = cargarJornadasAdmin;
+  document.getElementById("ccw-plan-date").addEventListener("change", cargarDisponibilidadJornadaAdmin);
   cargarLavadoresAdmin(); cargarJornadasAdmin();
 
   document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
