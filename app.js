@@ -4,6 +4,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB
 const WASHER_ID = "711080b4-ff5a-44f9-88de-e840a93294d5";
 const VAPID_PUBLIC_KEY = "BKgvzZqkP_yEyQTUkVzDac6I2dZVIai3FTvxbTVjp-thttnSxfk65arLDAmSKZjKwLutlfaZ4oNF7c54pjoJcU4";
 const ACCESS_FUNCTION = `${SUPABASE_URL}/functions/v1/gestionar-acceso-lavador`;
+let ccwWashersAdminCache = [];
 
 const headers = {
   apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -619,9 +620,7 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
         body: JSON.stringify({ action: "crear_reserva", reserva: booking })
       });
       const data = await response.json().catch(() => ({}));
-      // gestionar-reservas devuelve el resultado de ccw_create_booking
-      // directamente en data, no dentro de data.reserva.
-      if (!response.ok || data.ok !== true || !data.booking_code) {
+      if (!response.ok || data.ok !== true) {
         throw new Error(data.error || "No se pudo confirmar la cita. Prueba otra hora o fecha.");
       }
 
@@ -732,7 +731,15 @@ function mostrarReservasAdmin(reservas) {
             <section style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:2px;display:grid;gap:4px">
               <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
               <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
-              <div><strong>Lavador:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+              <div><strong>Lavador asignado:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+              <label style="display:grid;gap:5px;font-weight:700">Cambiar lavador
+                <select data-assign-washer="${escaparHTML(v.vehicle_id || "")}" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
+                  <option value="">Selecciona un lavador activo</option>
+                  ${ccwWashersAdminCache.filter(w => w.status === "activo").map(w => `<option value="${escaparHTML(w.id)}" ${w.id === v.washer_id ? "selected" : ""}>${escaparHTML(w.full_name)}</option>`).join("")}
+                </select>
+              </label>
+              <button type="button" data-save-assignment="${escaparHTML(v.vehicle_id || "")}" style="padding:9px;background:#18764e;color:white;border:0;border-radius:6px;font-weight:700">Guardar asignación</button>
+              <p data-assignment-message="${escaparHTML(v.vehicle_id || "")}" role="status" style="margin:0;font-size:12px"></p>
               <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
               <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
             </section>`).join("") : '<div>Detalles de servicio no disponibles.</div>'}
@@ -740,6 +747,31 @@ function mostrarReservasAdmin(reservas) {
         </div>
       </details>`;
   }).join("");
+  container.querySelectorAll("[data-save-assignment]").forEach(button => {
+    button.onclick = async () => {
+      const vehicleId = button.dataset.saveAssignment;
+      const select = container.querySelector(`[data-assign-washer="${vehicleId}"]`);
+      const msg = container.querySelector(`[data-assignment-message="${vehicleId}"]`);
+      if (!vehicleId || !select?.value) { if (msg) msg.textContent = "Selecciona un lavador activo."; return; }
+      button.disabled = true;
+      if (msg) msg.textContent = "Validando disponibilidad y guardando…";
+      try {
+        const token = sessionStorage.getItem("ccw_access_token");
+        if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reasignar_lavador", vehicle_id: vehicleId, washer_id: select.value })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo guardar la asignación.");
+        if (msg) msg.textContent = data.message || "Asignación guardada.";
+        await actualizarReservasAdmin();
+      } catch (error) {
+        if (msg) msg.textContent = error.message || "No se pudo guardar la asignación.";
+      } finally { button.disabled = false; }
+    };
+  });
 }
 async function actualizarReservasAdmin() {
   const message = document.getElementById("ccw-reservas-message");
@@ -810,6 +842,7 @@ async function cargarLavadoresAdmin() {
   try {
     const result = await llamarAdminLavador({ action: "list_washers" });
     const washers = result.washers || [];
+    ccwWashersAdminCache = washers;
     list.innerHTML = washers.map(w => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px;display:grid;gap:6px"><strong>${escaparHTML(w.full_name)}</strong><span>Estado: ${escaparHTML(w.status)} · Ingreso: ${escaparHTML(w.hired_at || "—")}</span>${w.deactivated_at ? `<span>Desactivado: ${escaparHTML(w.deactivated_at)}</span>` : `<button type="button" data-deactivate-washer="${escaparHTML(w.id)}" style="padding:8px">Desactivar conservando historial</button>`}</div>`).join("") || "No hay lavadores registrados.";
     list.querySelectorAll("[data-deactivate-washer]").forEach(btn => btn.onclick = async () => { if (!confirm("¿Desactivar este lavador? Su historial se conservará.")) return; try { await llamarAdminLavador({ action: "deactivate_washer", washer_id: btn.dataset.deactivateWasher }); msg.textContent = "Lavador desactivado."; await cargarLavadoresAdmin(); } catch(e) { msg.textContent = e.message; } });
     const active = washers.filter(w => w.status === "activo");
@@ -820,6 +853,7 @@ async function cargarLavadoresAdmin() {
     const planList = document.getElementById("ccw-plan-washer-list");
     planList.innerHTML = active.map(w => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px;display:grid;gap:8px"><label><input type="checkbox" data-plan-washer="${escaparHTML(w.id)}" checked> ${escaparHTML(w.full_name)} disponible</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label>Desde<input type="time" data-plan-start="${escaparHTML(w.id)}" value="07:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label><label>Hasta<input type="time" data-plan-end="${escaparHTML(w.id)}" value="18:00" style="display:block;width:100%;box-sizing:border-box;padding:8px"></label></div></div>`).join("") || "Registra primero un lavador.";
     msg.textContent = `${washers.length} lavador(es) registrados.`;
+    if (document.getElementById("ccw-reservas-lista")) await actualizarReservasAdmin();
   } catch(e) { msg.textContent = e.message; }
 }
 
