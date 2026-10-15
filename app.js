@@ -1081,7 +1081,11 @@ function mostrarLoginLavador(message = "") {
     ${cabecera("Acceso del lavador")}
     <main style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-pin-form" style="display:grid;gap:14px">
-        <p>Introduce el PIN diario que te entregó la administración.</p>
+        <p>Selecciona tu nombre e introduce el PIN diario que te entregó la administración.</p>
+        <label for="ccw-washer-login">Lavador</label>
+        <select id="ccw-washer-login" required style="padding:14px;font-size:16px">
+          <option value="">Cargando lavadores…</option>
+        </select>
         <label for="ccw-pin">PIN de 4 dígitos</label>
         <input id="ccw-pin" type="password" inputmode="numeric" pattern="[0-9]{4}"
           maxlength="4" autocomplete="one-time-code" required
@@ -1093,11 +1097,35 @@ function mostrarLoginLavador(message = "") {
     </main>`;
 
   document.getElementById("ccw-washer-back").onclick = () => mostrarInicio();
+
+  const washerSelect = document.getElementById("ccw-washer-login");
+  const pinSubmitButton = document.querySelector('#ccw-pin-form button[type="submit"]');
+  pinSubmitButton.disabled = true;
+  llamarFuncion({ action: "list_active_washers_for_pin" })
+    .then(result => {
+      const washers = Array.isArray(result.washers) ? result.washers : [];
+      washerSelect.innerHTML = '<option value="">Selecciona tu nombre</option>' +
+        washers.map(w => `<option value="${escaparHTML(w.id)}">${escaparHTML(w.full_name)}</option>`).join("");
+      if (!washers.length) {
+        washerSelect.innerHTML = '<option value="">No hay lavadores activos</option>';
+      }
+    })
+    .catch(error => {
+      washerSelect.innerHTML = '<option value="">No se pudo cargar la lista</option>';
+      document.getElementById("ccw-washer-message").textContent = error.message;
+    })
+    .finally(() => { pinSubmitButton.disabled = false; });
+
   document.getElementById("ccw-pin-form").onsubmit = async event => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('button[type="submit"]');
     const output = document.getElementById("ccw-washer-message");
     const pin = document.getElementById("ccw-pin").value.trim();
+    const selectedWasherId = document.getElementById("ccw-washer-login").value;
+    if (!selectedWasherId) {
+      output.textContent = "Selecciona tu nombre de la lista.";
+      return;
+    }
     if (!/^\d{4}$/.test(pin)) {
       output.textContent = "Introduce exactamente 4 dígitos.";
       return;
@@ -1107,7 +1135,7 @@ function mostrarLoginLavador(message = "") {
     try {
       const result = await llamarFuncion({
         action: "validate_pin",
-        washer_id: WASHER_ID,
+        washer_id: selectedWasherId,
         pin
       });
       if (!result.session_token || !result.expires_at) {
