@@ -619,8 +619,10 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
         body: JSON.stringify({ action: "crear_reserva", reserva: booking })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok !== true || data.reserva?.ok !== true) {
-        throw new Error(data.error || data.reserva?.error || "No se pudo confirmar la cita. Prueba otra hora o fecha.");
+      // gestionar-reservas devuelve el resultado de ccw_create_booking
+      // directamente en data, no dentro de data.reserva.
+      if (!response.ok || data.ok !== true || !data.booking_code) {
+        throw new Error(data.error || "No se pudo confirmar la cita. Prueba otra hora o fecha.");
       }
 
       // Nunca mostrar ni guardar lookup_secret en la página.
@@ -629,8 +631,8 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
       success.innerHTML = `
         <h3 style="margin-top:0">¡Solicitud confirmada!</h3>
         <p>Tu código de reserva es:</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.reserva.booking_code || "")}</p>
-        <p>Fecha: ${escaparHTML(data.reserva.appointment_date || booking.appointment_date)}</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.booking_code || "")}</p>
+        <p>Fecha: ${escaparHTML(data.appointment_date || booking.appointment_date)}</p>
         <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
         <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
         <p>Precio confirmado: ${escaparHTML(formatoPrecio(tariff.price))}</p>
