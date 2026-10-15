@@ -99,7 +99,7 @@ async function obtenerSesionAdmin() {
 async function generarPinLavador(washerId, planDate) {
   const token = sessionStorage.getItem("ccw_access_token");
   if (!token) throw new Error("Inicia sesión como administradora primero.");
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(planDate || "")) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(planDate || "")) {
     throw new Error("Selecciona una fecha válida para el PIN.");
   }
 
