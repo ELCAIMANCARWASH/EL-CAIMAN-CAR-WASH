@@ -96,9 +96,12 @@ async function obtenerSesionAdmin() {
   return { perfil: await comprobarPerfilAdmin(token), accessToken: token };
 }
 
-async function generarPinLavador(washerId) {
+async function generarPinLavador(washerId, planDate) {
   const token = sessionStorage.getItem("ccw_access_token");
   if (!token) throw new Error("Inicia sesión como administradora primero.");
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(planDate || "")) {
+    throw new Error("Selecciona una fecha válida para el PIN.");
+  }
 
   const response = await fetch(ACCESS_FUNCTION, {
     method: "POST",
@@ -106,9 +109,9 @@ async function generarPinLavador(washerId) {
       ...headers,
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ action: "generate_pin", washer_id: washerId })
+    body: JSON.stringify({ action: "generate_pin", washer_id: washerId, plan_date: planDate })
   });
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "No se pudo generar el PIN.");
   return data;
 }
@@ -971,17 +974,24 @@ function mostrarPanelAdmin(profile) {
       <select id="ccw-washer" style="padding:12px">
         <option value="${WASHER_ID}">Pedro</option>
       </select>
-      ${boton("Generar PIN de hoy", "ccw-generate-pin")}
-      <button id="ccw-revoke-pin" type="button" style="padding:12px;background:#a52828;color:white;border:0;border-radius:8px;font-weight:bold">Revocar PIN de hoy</button>
+      <label for="ccw-pin-date">Fecha de la jornada para el PIN
+        <input id="ccw-pin-date" type="date" required style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px">
+      </label>
+      ${boton("Generar PIN para esta fecha", "ccw-generate-pin")}
+      <button id="ccw-revoke-pin" type="button" style="padding:12px;background:#a52828;color:white;border:0;border-radius:8px;font-weight:bold">Revocar PIN de esta fecha</button>
       <p id="ccw-pin-message" role="status"></p>
       <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
       <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
     </main>`;
 
-  const hoyLocal = new Date();
-  const fechaLocal = new Date(hoyLocal.getTime() - hoyLocal.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const partesFechaPanama = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Panama", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const partesHoy = Object.fromEntries(partesFechaPanama.map(parte => [parte.type, parte.value]));
+  const fechaLocal = `${partesHoy.year}-${partesHoy.month}-${partesHoy.day}`;
   document.getElementById("ccw-new-washer-date").value = fechaLocal;
   document.getElementById("ccw-plan-date").value = fechaLocal;
+  document.getElementById("ccw-pin-date").value = fechaLocal;
   document.getElementById("ccw-create-washer").onclick = async () => {
     const msg = document.getElementById("ccw-washers-message");
     const name = document.getElementById("ccw-new-washer-name").value.trim();
@@ -1004,9 +1014,11 @@ function mostrarPanelAdmin(profile) {
     button.disabled = true;
     message.textContent = "Solicitando PIN…";
     try {
-      const result = await generarPinLavador(document.getElementById("ccw-washer").value);
+      const planDate = document.getElementById("ccw-pin-date").value;
+      if (!planDate) throw new Error("Selecciona la fecha para la que deseas generar el PIN.");
+      const result = await generarPinLavador(document.getElementById("ccw-washer").value, planDate);
       message.textContent = result.pin
-        ? `PIN generado: ${result.pin}. Entrégalo al lavador de forma privada.`
+        ? `PIN generado para ${result.pin_date || planDate}: ${result.pin}. Entrégalo al lavador de forma privada.`
         : "La función no devolvió un PIN.";
     } catch (error) {
       message.textContent = error.message;
@@ -1025,12 +1037,17 @@ function mostrarPanelAdmin(profile) {
       message.textContent = "Selecciona un lavador activo.";
       return;
     }
-    if (!confirm(`¿Revocar el PIN de hoy de ${washerName}? También se cerrarán sus sesiones activas de hoy.`)) return;
+    const planDate = document.getElementById("ccw-pin-date").value;
+    if (!planDate) {
+      message.textContent = "Selecciona la fecha del PIN que deseas revocar.";
+      return;
+    }
+    if (!confirm(`¿Revocar el PIN de ${washerName} para la fecha ${planDate}? También se cerrarán sus sesiones de esa fecha.`)) return;
     button.disabled = true;
     message.textContent = "Revocando PIN…";
     try {
-      const result = await llamarAdminLavador({ action: "revoke_pin", washer_id: washerId });
-      message.textContent = result.message || "PIN de hoy revocado. Para permitir otro acceso, genera un PIN nuevo.";
+      const result = await llamarAdminLavador({ action: "revoke_pin", washer_id: washerId, plan_date: planDate });
+      message.textContent = result.message || `PIN de ${planDate} revocado. Para permitir otro acceso, genera un PIN nuevo para esa fecha.`;
     } catch (error) {
       message.textContent = error.message || "No se pudo revocar el PIN.";
     } finally {
