@@ -890,6 +890,7 @@ function mostrarPanelAdmin(profile) {
         <option value="${WASHER_ID}">Pedro</option>
       </select>
       ${boton("Generar PIN de hoy", "ccw-generate-pin")}
+      <button id="ccw-revoke-pin" type="button" style="padding:12px;background:#a52828;color:white;border:0;border-radius:8px;font-weight:bold">Revocar PIN de hoy</button>
       <p id="ccw-pin-message" role="status"></p>
       <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
       <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
@@ -926,6 +927,29 @@ function mostrarPanelAdmin(profile) {
         : "La función no devolvió un PIN.";
     } catch (error) {
       message.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  document.getElementById("ccw-revoke-pin").onclick = async event => {
+    const button = event.currentTarget;
+    const washerId = document.getElementById("ccw-washer").value;
+    const selector = document.getElementById("ccw-washer");
+    const washerName = selector.options[selector.selectedIndex]?.text || "el lavador seleccionado";
+    const message = document.getElementById("ccw-pin-message");
+    if (!washerId) {
+      message.textContent = "Selecciona un lavador activo.";
+      return;
+    }
+    if (!confirm(`¿Revocar el PIN de hoy de ${washerName}? También se cerrarán sus sesiones activas de hoy.`)) return;
+    button.disabled = true;
+    message.textContent = "Revocando PIN…";
+    try {
+      const result = await llamarAdminLavador({ action: "revoke_pin", washer_id: washerId });
+      message.textContent = result.message || "PIN de hoy revocado. Para permitir otro acceso, genera un PIN nuevo.";
+    } catch (error) {
+      message.textContent = error.message || "No se pudo revocar el PIN.";
     } finally {
       button.disabled = false;
     }
