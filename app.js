@@ -1192,24 +1192,40 @@ async function cargarTrabajosLavador() {
       const assignmentId = escaparHTML(job.id);
       return `
       <article data-job-id="${assignmentId}" style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:16px;display:grid;gap:10px">
-        <strong style="font-size:18px">Servicio asignado</strong>
+        <strong style="font-size:18px">${escaparHTML(job.service_name || "Servicio asignado")}</strong>
         <p style="margin:0">Estado: <strong>${escaparHTML(job.status || "asignado")}</strong></p>
         <p style="margin:0">Inicio programado: ${escaparHTML(job.scheduled_start || "Pendiente")}</p>
         <p style="margin:0">Fin programado: ${escaparHTML(job.scheduled_end || "Pendiente")}</p>
-        <p style="font-size:12px;color:#52655a;margin:0">Referencia del vehículo: ${escaparHTML(job.appointment_vehicle_id)}</p>
+        <div style="background:#f4f7f5;border-radius:8px;padding:12px;display:grid;gap:6px">
+          <strong>Datos del cliente y ubicación</strong>
+          <p style="margin:0"><strong>Cliente:</strong> ${escaparHTML(job.customer_name || "No registrado")}</p>
+          <p style="margin:0"><strong>Dirección:</strong> ${escaparHTML(job.customer_address || "No registrada; consulta con administración antes de salir")}</p>
+          <p style="margin:0"><strong>Teléfono:</strong> ${escaparHTML(job.customer_phone || "No registrado")}</p>
+          <p style="margin:0"><strong>Servicio:</strong> ${escaparHTML(job.service_name || "Servicio")}</p>
+          <p style="margin:0"><strong>Vehículo:</strong> ${escaparHTML([job.vehicle_type, job.make, job.model, job.color].filter(Boolean).join(" · ") || "No especificado")}</p>
+          <p style="margin:0"><strong>Placa:</strong> ${escaparHTML(job.license_plate || "No registrada")}</p>
+          ${job.booking_code ? `<p style="margin:0"><strong>Código de reserva:</strong> ${escaparHTML(job.booking_code)}</p>` : ""}
+          ${job.customer_notes ? `<p style="margin:0"><strong>Indicaciones:</strong> ${escaparHTML(job.customer_notes)}</p>` : ""}
+          ${job.customer_address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.customer_address)}" target="_blank" rel="noopener" style="display:inline-block;padding:10px;background:#18764e;color:white;text-align:center;border-radius:7px;text-decoration:none;font-weight:bold">Abrir dirección en el mapa</a>` : ""}
+        </div>
+        <p style="font-size:12px;color:#52655a;margin:0">Referencia del servicio: ${escaparHTML(job.appointment_vehicle_id)}</p>
         <div style="border-top:1px solid #e2e9e4;padding-top:12px">
           <strong>Fotografías del servicio</strong>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:10px">
             <section style="border:1px solid #d7e1da;border-radius:9px;padding:10px;display:grid;gap:8px">
               <strong>Antes del lavado ${beforeDone ? "✓" : "(obligatoria)"}</strong>
               ${beforeUrl ? `<a href="${escaparHTML(beforeUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(beforeUrl)}" alt="Fotografía antes del lavado" style="width:100%;max-height:220px;object-fit:contain;border-radius:6px"></a>` : `<p style="margin:0;color:#64756c;font-size:13px">Todavía no hay fotografía.</p>`}
-              <input type="file" id="ccw-before-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía antes del lavado" style="width:100%">
+              <input type="file" id="ccw-before-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía antes del lavado" style="display:none">
+              <button type="button" data-open-camera="before" data-job-id="${assignmentId}" style="padding:10px;border:1px solid #b9c9bf;border-radius:7px;background:white;color:#183126">📷 Tomar foto del antes</button>
+              <span id="ccw-before-file-${assignmentId}" style="font-size:12px;color:#52655a">En teléfono, este botón abre la cámara; en computadora permite elegir una imagen.</span>
               <button type="button" data-photo-type="before" data-job-id="${assignmentId}" style="padding:10px;border:0;border-radius:7px;background:#e9f2ec;color:#183126">${beforeDone ? "Cambiar foto del antes" : "Guardar foto del antes"}</button>
             </section>
             <section style="border:1px solid #d7e1da;border-radius:9px;padding:10px;display:grid;gap:8px">
               <strong>Después del lavado ${afterDone ? "✓" : "(obligatoria)"}</strong>
               ${afterUrl ? `<a href="${escaparHTML(afterUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(afterUrl)}" alt="Fotografía después del lavado" style="width:100%;max-height:220px;object-fit:contain;border-radius:6px"></a>` : `<p style="margin:0;color:#64756c;font-size:13px">Todavía no hay fotografía.</p>`}
-              <input type="file" id="ccw-after-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía después del lavado" style="width:100%">
+              <input type="file" id="ccw-after-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía después del lavado" style="display:none">
+              <button type="button" data-open-camera="after" data-job-id="${assignmentId}" style="padding:10px;border:1px solid #b9c9bf;border-radius:7px;background:white;color:#183126">📷 Tomar foto del después</button>
+              <span id="ccw-after-file-${assignmentId}" style="font-size:12px;color:#52655a">En teléfono, este botón abre la cámara; en computadora permite elegir una imagen.</span>
               <button type="button" data-photo-type="after" data-job-id="${assignmentId}" style="padding:10px;border:0;border-radius:7px;background:#e9f2ec;color:#183126">${afterDone ? "Cambiar foto del después" : "Guardar foto del después"}</button>
             </section>
           </div>
@@ -1218,6 +1234,24 @@ async function cargarTrabajosLavador() {
         <p id="ccw-job-message-${assignmentId}" role="status" style="margin:0;font-size:13px"></p>
       </article>`;
     }).join("");
+
+    container.querySelectorAll("button[data-open-camera]").forEach(button => {
+      button.addEventListener("click", () => {
+        const jobId = button.dataset.jobId;
+        const type = button.dataset.openCamera;
+        const input = document.getElementById(`ccw-${type}-${jobId}`);
+        if (input) input.click();
+      });
+    });
+    container.querySelectorAll('input[type="file"][id^="ccw-before-"], input[type="file"][id^="ccw-after-"]').forEach(input => {
+      input.addEventListener("change", () => {
+        const match = input.id.match(/^ccw-(before|after)-(.+)$/);
+        if (!match) return;
+        const [, type, jobId] = match;
+        const label = document.getElementById(`ccw-${type}-file-${jobId}`);
+        if (label) label.textContent = input.files?.[0]?.name ? `Seleccionada: ${input.files[0].name}` : "No se seleccionó fotografía.";
+      });
+    });
 
     container.querySelectorAll("button[data-photo-type]").forEach(button => {
       button.addEventListener("click", async () => {
