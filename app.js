@@ -1,7 +1,6 @@
 
 const SUPABASE_URL = "https://adsgjmybppdacdndrqsf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_niEp79PXenQB2MVh7I8zpA_XSDAxIdB";
-const WASHER_ID = "711080b4-ff5a-44f9-88de-e840a93294d5";
 const VAPID_PUBLIC_KEY = "BKgvzZqkP_yEyQTUkVzDac6I2dZVIai3FTvxbTVjp-thttnSxfk65arLDAmSKZjKwLutlfaZ4oNF7c54pjoJcU4";
 const ACCESS_FUNCTION = `${SUPABASE_URL}/functions/v1/gestionar-acceso-lavador`;
 let ccwWashersAdminCache = [];
@@ -972,7 +971,7 @@ function mostrarPanelAdmin(profile) {
       </section>
       <label for="ccw-washer">Seleccionar lavador</label>
       <select id="ccw-washer" style="padding:12px">
-        <option value="${WASHER_ID}">Pedro</option>
+        <option value="">Cargando lavadores…</option>
       </select>
       <label for="ccw-pin-date">Fecha de la jornada para el PIN
         <input id="ccw-pin-date" type="date" required style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px">
@@ -1081,11 +1080,7 @@ function mostrarLoginLavador(message = "") {
     ${cabecera("Acceso del lavador")}
     <main style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-pin-form" style="display:grid;gap:14px">
-        <p>Selecciona tu nombre e introduce el PIN diario que te entregó la administración.</p>
-        <label for="ccw-washer-login">Lavador</label>
-        <select id="ccw-washer-login" required style="padding:14px;font-size:16px">
-          <option value="">Cargando lavadores…</option>
-        </select>
+        <p>Introduce únicamente el PIN diario que te entregó la administración.</p>
         <label for="ccw-pin">PIN de 4 dígitos</label>
         <input id="ccw-pin" type="password" inputmode="numeric" pattern="[0-9]{4}"
           maxlength="4" autocomplete="one-time-code" required
@@ -1097,35 +1092,11 @@ function mostrarLoginLavador(message = "") {
     </main>`;
 
   document.getElementById("ccw-washer-back").onclick = () => mostrarInicio();
-
-  const washerSelect = document.getElementById("ccw-washer-login");
-  const pinSubmitButton = document.querySelector('#ccw-pin-form button[type="submit"]');
-  pinSubmitButton.disabled = true;
-  llamarFuncion({ action: "list_active_washers_for_pin" })
-    .then(result => {
-      const washers = Array.isArray(result.washers) ? result.washers : [];
-      washerSelect.innerHTML = '<option value="">Selecciona tu nombre</option>' +
-        washers.map(w => `<option value="${escaparHTML(w.id)}">${escaparHTML(w.full_name)}</option>`).join("");
-      if (!washers.length) {
-        washerSelect.innerHTML = '<option value="">No hay lavadores activos</option>';
-      }
-    })
-    .catch(error => {
-      washerSelect.innerHTML = '<option value="">No se pudo cargar la lista</option>';
-      document.getElementById("ccw-washer-message").textContent = error.message;
-    })
-    .finally(() => { pinSubmitButton.disabled = false; });
-
   document.getElementById("ccw-pin-form").onsubmit = async event => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('button[type="submit"]');
     const output = document.getElementById("ccw-washer-message");
     const pin = document.getElementById("ccw-pin").value.trim();
-    const selectedWasherId = document.getElementById("ccw-washer-login").value;
-    if (!selectedWasherId) {
-      output.textContent = "Selecciona tu nombre de la lista.";
-      return;
-    }
     if (!/^\d{4}$/.test(pin)) {
       output.textContent = "Introduce exactamente 4 dígitos.";
       return;
@@ -1133,18 +1104,14 @@ function mostrarLoginLavador(message = "") {
     button.disabled = true;
     output.textContent = "Validando PIN…";
     try {
-      const result = await llamarFuncion({
-        action: "validate_pin",
-        washer_id: selectedWasherId,
-        pin
-      });
+      const result = await llamarFuncion({ action: "validate_pin", pin });
       if (!result.session_token || !result.expires_at) {
         throw new Error("El servidor no devolvió una sesión válida.");
       }
       guardarSesionLavador(result.session_token, result.expires_at, result.washer_name);
       await cargarTrabajosLavador();
     } catch (error) {
-      output.textContent = error.message;
+      output.textContent = error.message || "No se pudo validar el PIN.";
     } finally {
       button.disabled = false;
     }
