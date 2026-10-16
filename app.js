@@ -1118,6 +1118,35 @@ function mostrarLoginLavador(message = "") {
   };
 }
 
+function leerArchivoDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la fotografía."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function comprimirFoto(dataUrl) {
+  const image = new Image();
+  image.src = dataUrl;
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error("No se pudo abrir la fotografía."));
+  });
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("No se pudo preparar la fotografía.");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const compressed = canvas.toDataURL("image/jpeg", 0.78);
+  if (compressed.length > 2_000_000) throw new Error("La fotografía sigue siendo demasiado grande. Toma otra con menor resolución.");
+  return compressed;
+}
+
 async function cargarTrabajosLavador() {
   const token = sessionStorage.getItem("ccw_washer_session");
   const expiry = sessionStorage.getItem("ccw_washer_expiry");
@@ -1151,18 +1180,84 @@ async function cargarTrabajosLavador() {
     const jobs = Array.isArray(result.jobs) ? result.jobs : [];
     const container = document.getElementById("ccw-jobs");
     document.getElementById("ccw-jobs-message").textContent =
-      jobs.length ? `Tienes ${jobs.length} trabajo(s) asignado(s).`
-                  : "Todavía no tienes servicios asignados.";
+      jobs.length ? `Tienes ${jobs.length} trabajo(s) pendiente(s).`
+                  : "No tienes trabajos pendientes. Los servicios terminados se conservan en el historial administrativo.";
 
-    container.innerHTML = jobs.map(job => `
-      <article style="background:white;border:1px solid #d7e1da;border-radius:10px;padding:14px">
-        <strong>Servicio asignado</strong>
-        <p>Estado: ${escaparHTML(job.status || "asignado")}</p>
-        <p>Inicio programado: ${escaparHTML(job.scheduled_start || "Pendiente")}</p>
-        <p>Fin programado: ${escaparHTML(job.scheduled_end || "Pendiente")}</p>
-        <p style="font-size:12px;color:#52655a">Referencia del vehículo: ${escaparHTML(job.appointment_vehicle_id)}</p>
-      </article>
-    `).join("");
+    container.innerHTML = jobs.map(job => {
+      const beforeUrl = job.before_photo_url || "";
+      const afterUrl = job.after_photo_url || "";
+      const beforeDone = Boolean(job.before_photo_path);
+      const afterDone = Boolean(job.after_photo_path);
+      const canComplete = beforeDone && afterDone;
+      const assignmentId = escaparHTML(job.id);
+      return `
+      <article data-job-id="${assignmentId}" style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:16px;display:grid;gap:10px">
+        <strong style="font-size:18px">Servicio asignado</strong>
+        <p style="margin:0">Estado: <strong>${escaparHTML(job.status || "asignado")}</strong></p>
+        <p style="margin:0">Inicio programado: ${escaparHTML(job.scheduled_start || "Pendiente")}</p>
+        <p style="margin:0">Fin programado: ${escaparHTML(job.scheduled_end || "Pendiente")}</p>
+        <p style="font-size:12px;color:#52655a;margin:0">Referencia del vehículo: ${escaparHTML(job.appointment_vehicle_id)}</p>
+        <div style="border-top:1px solid #e2e9e4;padding-top:12px">
+          <strong>Fotografías del servicio</strong>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:10px">
+            <section style="border:1px solid #d7e1da;border-radius:9px;padding:10px;display:grid;gap:8px">
+              <strong>Antes del lavado ${beforeDone ? "✓" : "(obligatoria)"}</strong>
+              ${beforeUrl ? `<a href="${escaparHTML(beforeUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(beforeUrl)}" alt="Fotografía antes del lavado" style="width:100%;max-height:220px;object-fit:contain;border-radius:6px"></a>` : `<p style="margin:0;color:#64756c;font-size:13px">Todavía no hay fotografía.</p>`}
+              <input type="file" id="ccw-before-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía antes del lavado" style="width:100%">
+              <button type="button" data-photo-type="before" data-job-id="${assignmentId}" style="padding:10px;border:0;border-radius:7px;background:#e9f2ec;color:#183126">${beforeDone ? "Cambiar foto del antes" : "Guardar foto del antes"}</button>
+            </section>
+            <section style="border:1px solid #d7e1da;border-radius:9px;padding:10px;display:grid;gap:8px">
+              <strong>Después del lavado ${afterDone ? "✓" : "(obligatoria)"}</strong>
+              ${afterUrl ? `<a href="${escaparHTML(afterUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(afterUrl)}" alt="Fotografía después del lavado" style="width:100%;max-height:220px;object-fit:contain;border-radius:6px"></a>` : `<p style="margin:0;color:#64756c;font-size:13px">Todavía no hay fotografía.</p>`}
+              <input type="file" id="ccw-after-${assignmentId}" accept="image/*" capture="environment" aria-label="Tomar fotografía después del lavado" style="width:100%">
+              <button type="button" data-photo-type="after" data-job-id="${assignmentId}" style="padding:10px;border:0;border-radius:7px;background:#e9f2ec;color:#183126">${afterDone ? "Cambiar foto del después" : "Guardar foto del después"}</button>
+            </section>
+          </div>
+        </div>
+        <button type="button" data-complete-job="${assignmentId}" ${canComplete ? "" : "disabled"} style="padding:13px;border:0;border-radius:8px;background:${canComplete ? "#18764e" : "#aebbb3"};color:white;font-weight:bold;cursor:${canComplete ? "pointer" : "not-allowed"}">${canComplete ? "Marcar trabajo como terminado" : "Guarda las dos fotografías para finalizar"}</button>
+        <p id="ccw-job-message-${assignmentId}" role="status" style="margin:0;font-size:13px"></p>
+      </article>`;
+    }).join("");
+
+    container.querySelectorAll("button[data-photo-type]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const jobId = button.dataset.jobId;
+        const type = button.dataset.photoType;
+        const input = document.getElementById(`ccw-${type}-${jobId}`);
+        const message = document.getElementById(`ccw-job-message-${jobId}`);
+        const file = input?.files?.[0];
+        if (!file) { message.textContent = `Selecciona o toma primero la fotografía de ${type === "before" ? "antes" : "después"}.`; return; }
+        if (!file.type.startsWith("image/")) { message.textContent = "El archivo debe ser una fotografía."; return; }
+        button.disabled = true;
+        message.textContent = "Preparando y guardando la fotografía…";
+        try {
+          const rawDataUrl = await leerArchivoDataUrl(file);
+          const dataUrl = await comprimirFoto(rawDataUrl);
+          await llamarFuncion({ action: "upload_job_photo", session_token: token, assignment_id: jobId, photo_type: type, photo_data_url: dataUrl });
+          message.textContent = "Fotografía guardada correctamente.";
+          await cargarTrabajosLavador();
+        } catch (error) {
+          message.textContent = error.message || "No se pudo guardar la fotografía.";
+        } finally { button.disabled = false; }
+      });
+    });
+
+    container.querySelectorAll("button[data-complete-job]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const jobId = button.dataset.completeJob;
+        const message = document.getElementById(`ccw-job-message-${jobId}`);
+        if (!confirm("¿Confirmas que este servicio está terminado? Se retirará de pendientes y quedará conservado en el historial.")) return;
+        button.disabled = true;
+        message.textContent = "Registrando finalización…";
+        try {
+          await llamarFuncion({ action: "complete_job", session_token: token, assignment_id: jobId });
+          await cargarTrabajosLavador();
+        } catch (error) {
+          message.textContent = error.message || "No se pudo finalizar el trabajo.";
+          button.disabled = false;
+        }
+      });
+    });
   } catch (error) {
     document.getElementById("ccw-jobs-message").textContent = error.message;
   }
