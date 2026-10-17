@@ -708,15 +708,24 @@ function mostrarReservasAdmin(reservas) {
     container.innerHTML = '<p class="notice">No hay reservas registradas.</p>';
     return;
   }
+  const estadoVisible = r => {
+    const statuses = (Array.isArray(r.vehicles) ? r.vehicles : [])
+      .map(v => String(v.assignment_status || v.status || "").toLowerCase());
+    if (statuses.length && statuses.every(s => ["terminada", "terminado", "completada", "completado"].includes(s))) return "terminada";
+    if (statuses.some(s => ["en_proceso", "en proceso"].includes(s))) return "en proceso";
+    return r.status || "sin estado";
+  };
   container.innerHTML = reservas.map(r => {
     const address = r.customer_address || r.house_number || r.address || "No registrado";
     const vehicles = Array.isArray(r.vehicles) ? r.vehicles : [];
+    const status = estadoVisible(r);
+    const done = status.toLowerCase() === "terminada";
     return `
       <details style="background:#fff;border:1px solid #d8e2dc;border-radius:8px;padding:0 12px;margin:0 0 8px;overflow-wrap:anywhere;box-shadow:none;font-size:13px;line-height:1.35">
         <summary style="list-style:none;cursor:pointer;padding:10px 0;display:grid;gap:5px">
           <span style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <strong style="font-size:13px;color:#173b2c">${escaparHTML(r.booking_code || "Reserva")}</strong>
-            <span style="background:#edf5ef;color:#24563d;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700;white-space:nowrap">${escaparHTML(r.status || "sin estado")}</span>
+            <span style="background:${done ? "#e2f4e8" : "#edf5ef"};color:${done ? "#17633d" : "#24563d"};padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700;white-space:nowrap">${escaparHTML(status)}</span>
           </span>
           <span style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3px 12px">
             <span><strong>Casa:</strong> ${escaparHTML(address)}</span>
@@ -729,11 +738,34 @@ function mostrarReservasAdmin(reservas) {
         <div style="border-top:1px solid #e5ece7;padding:9px 0 11px;display:grid;gap:6px">
           <div><strong>Fecha de la reserva:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
           <div><strong>Dirección completa:</strong> ${escaparHTML(address)}</div>
-          ${vehicles.length ? vehicles.map(v => `
+          ${vehicles.length ? vehicles.map(v => {
+            const assignmentStatus = String(v.assignment_status || "").toLowerCase();
+            const serviceDone = ["terminada", "terminado", "completada", "completado"].includes(assignmentStatus);
+            const beforeUrl = v.before_photo_url || "";
+            const afterUrl = v.after_photo_url || "";
+            const photos = `
+              <div style="border-top:1px solid #edf1ee;padding-top:8px;margin-top:3px;display:grid;gap:8px">
+                <strong>Fotografías del lavado</strong>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+                  <div style="border:1px solid #d8e2dc;border-radius:7px;padding:8px;display:grid;gap:5px">
+                    <strong>Antes</strong>
+                    ${beforeUrl ? `<a href="${escaparHTML(beforeUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(beforeUrl)}" alt="Foto antes del lavado" loading="lazy" style="width:100%;max-height:220px;object-fit:contain;border-radius:5px"></a>` : '<span style="color:#65756c">No hay foto guardada.</span>'}
+                  </div>
+                  <div style="border:1px solid #d8e2dc;border-radius:7px;padding:8px;display:grid;gap:5px">
+                    <strong>Después</strong>
+                    ${afterUrl ? `<a href="${escaparHTML(afterUrl)}" target="_blank" rel="noopener"><img src="${escaparHTML(afterUrl)}" alt="Foto después del lavado" loading="lazy" style="width:100%;max-height:220px;object-fit:contain;border-radius:5px"></a>` : '<span style="color:#65756c">No hay foto guardada.</span>'}
+                  </div>
+                </div>
+              </div>`;
+            return `
             <section style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:2px;display:grid;gap:4px">
               <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
+              <div><strong>Estado del lavado:</strong> ${escaparHTML(v.assignment_status || "Sin asignación")}</div>
               <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
+              ${v.actual_start ? `<div><strong>Inicio real:</strong> ${escaparHTML(v.actual_start)}</div>` : ""}
+              ${v.actual_end ? `<div><strong>Finalizado:</strong> ${escaparHTML(v.actual_end)}</div>` : ""}
               <div><strong>Lavador asignado:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
+              ${serviceDone ? '<div style="color:#17633d;font-weight:700">✓ Lavado terminado</div>' : `
               <label style="display:grid;gap:5px;font-weight:700">Cambiar lavador
                 <select data-assign-washer="${escaparHTML(v.vehicle_id || "")}" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
                   <option value="">Selecciona un lavador activo</option>
@@ -741,10 +773,12 @@ function mostrarReservasAdmin(reservas) {
                 </select>
               </label>
               <button type="button" data-save-assignment="${escaparHTML(v.vehicle_id || "")}" style="padding:9px;background:#18764e;color:white;border:0;border-radius:6px;font-weight:700">Guardar asignación</button>
-              <p data-assignment-message="${escaparHTML(v.vehicle_id || "")}" role="status" style="margin:0;font-size:12px"></p>
+              <p data-assignment-message="${escaparHTML(v.vehicle_id || "")}" role="status" style="margin:0;font-size:12px"></p>`}
               <div><strong>Vehículo:</strong> ${escaparHTML([v.vehicle_type, v.make, v.model, v.license_plate].filter(Boolean).join(" · ") || "—")}</div>
               <div><strong>Precio:</strong> ${v.price == null ? "Pendiente" : escaparHTML(formatoPrecio(Number(v.price)))}</div>
-            </section>`).join("") : '<div>Detalles de servicio no disponibles.</div>'}
+              ${photos}
+            </section>`;
+          }).join("") : '<div>Detalles de servicio no disponibles.</div>'}
           <div style="font-size:11px;color:#28724f;font-weight:700;padding-top:2px">− Cerrar ficha</div>
         </div>
       </details>`;
