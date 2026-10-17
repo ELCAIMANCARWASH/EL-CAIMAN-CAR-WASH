@@ -612,8 +612,12 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
     try {
       const tariff = tariffSelect.value === "" ? null : allTariffs[Number(tariffSelect.value)];
       if (!tariff) throw new Error("Selecciona un servicio y una tarifa confirmada.");  
-const customerEmail = document.getElementById("ccw-customer-email").value.trim();
-      const paymentMethod = document.getElementById("ccw-payment-method").value;
+const customerEmail = document.getElementById("ccw-customer-email").value.trim();      
+const paymentMethod = document
+  .getElementById("ccw-payment-method")
+  .value
+  .trim()
+  .toLowerCase();
 if (!["yappy", "ach", "efectivo"].includes(paymentMethod)) {
   throw new Error("Selecciona un método de pago válido.");
 }
