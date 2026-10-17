@@ -255,7 +255,18 @@ async function mostrarCliente() {
         <form id="ccw-booking-form" style="display:grid;gap:12px">
           <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Correo (opcional)<input id="ccw-customer-email" name="customer_email" type="email" maxlength="254" autocomplete="email" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          
+<label>Correo electrónico (obligatorio)
+  <input
+    id="ccw-customer-email"
+    name="customer_email"
+    type="email"
+    required
+    maxlength="254"
+    autocomplete="email"
+    style="display:block;width:100%;padding:12px;margin-top:5px"
+  >
+</label>
           <label>Número de casa y dirección exacta (obligatorio)
             <input id="ccw-customer-address" name="customer_address" required minlength="2" maxlength="250" autocomplete="street-address"
               style="display:block;width:100%;padding:12px;margin-top:5px"
