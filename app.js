@@ -797,6 +797,7 @@ function mostrarReservasAdmin(reservas) {
             <div><strong>Método de pago:</strong> ${escaparHTML(paymentMethod)}</div>
             <div><strong>Estado del pago:</strong> ${escaparHTML(paymentStatus)}</div>
             ${paymentAmount != null ? `<div><strong>Importe registrado:</strong> ${escaparHTML(formatoPrecio(Number(paymentAmount)))}</div>` : ""}
+            ${String(r.payment_status || "").toLowerCase() === "pendiente" && r.payment_id ? `<button type="button" data-confirm-payment="${escaparHTML(r.payment_id)}" data-payment-booking="${escaparHTML(r.booking_code || "")}" style="margin-top:5px;padding:10px;background:#18764e;color:white;border:0;border-radius:7px;font-weight:700;cursor:pointer">Confirmar recepción del pago</button><p data-payment-message="${escaparHTML(r.payment_id)}" role="status" style="margin:0;font-size:12px"></p>` : ""}
           </section>
           ${vehicles.length ? vehicles.map(v => {
             const assignmentStatus = String(v.assignment_status || "").toLowerCase();
@@ -843,6 +844,33 @@ function mostrarReservasAdmin(reservas) {
         </div>
       </details>`;
   }).join("");
+  container.querySelectorAll("[data-confirm-payment]").forEach(button => {
+    button.onclick = async () => {
+      const paymentId = button.dataset.confirmPayment;
+      const bookingCode = button.dataset.paymentBooking || "esta reserva";
+      const msg = container.querySelector(`[data-payment-message="${paymentId}"]`);
+      if (!paymentId) { if (msg) msg.textContent = "No se encontró el identificador del pago."; return; }
+      if (!confirm(`¿Confirmas que recibiste el pago de ${bookingCode}? Verifica primero el ingreso en Yappy, ACH o efectivo.`)) return;
+      button.disabled = true;
+      if (msg) msg.textContent = "Confirmando pago en Supabase…";
+      try {
+        const token = sessionStorage.getItem("ccw_access_token");
+        if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "confirmar_pago", payment_id: paymentId })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo confirmar el pago.");
+        if (msg) msg.textContent = "Pago confirmado y guardado en Supabase.";
+        await actualizarReservasAdmin();
+      } catch (error) {
+        if (msg) msg.textContent = error.message || "No se pudo confirmar el pago.";
+        button.disabled = false;
+      }
+    };
+  });
   container.querySelectorAll("[data-save-assignment]").forEach(button => {
     button.onclick = async () => {
       const vehicleId = button.dataset.saveAssignment;
