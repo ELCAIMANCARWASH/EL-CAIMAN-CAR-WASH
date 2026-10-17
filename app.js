@@ -1510,17 +1510,26 @@ async function cargarTrabajosLavador() {
       <h2>Hola, ${escaparHTML(name)}</h2>
       <p id="ccw-jobs-message" role="status">Consultando tus trabajos…</p>
       <section id="ccw-jobs" style="display:grid;gap:12px"></section>
+      <h3>Mis comisiones</h3>
+<section id="ccw-commissions" style="display:grid;gap:12px">
+  <p>Consultando tus comisiones…</p>
+</section>
+<button id="ccw-refresh-commissions" type="button" style="padding:12px">
+  Actualizar comisiones
+</button>
       <button id="ccw-refresh-jobs" type="button" style="padding:12px">Actualizar trabajos</button>
       <button id="ccw-washer-logout" type="button" style="padding:12px">Cerrar sesión</button>
     </main>`;
 
   document.getElementById("ccw-refresh-jobs").onclick = cargarTrabajosLavador;
+  
   document.getElementById("ccw-washer-logout").onclick = () => {
     borrarSesionLavador();
     mostrarInicio();
   };
-
+    
   try {
+    
     const result = await llamarFuncion({ action: "my_jobs", session_token: token });
     const jobs = Array.isArray(result.jobs) ? result.jobs : [];
     const container = document.getElementById("ccw-jobs");
@@ -1639,6 +1648,87 @@ async function cargarTrabajosLavador() {
     });
   } catch (error) {
     document.getElementById("ccw-jobs-message").textContent = error.message;
+  }
+}
+
+document.getElementById("ccw-refresh-commissions").onclick = cargarComisionesLavador;
+cargarComisionesLavador();
+async function cargarComisionesLavador() {
+  const token = sessionStorage.getItem("ccw_washer_session");
+  const container = document.getElementById("ccw-commissions");
+  const button = document.getElementById("ccw-refresh-commissions");
+
+  if (!container || !token) return;
+
+  if (button) button.disabled = true;
+  container.innerHTML = "<p>Consultando tus comisiones…</p>";
+
+  try {
+    const result = await llamarFuncion({
+      action: "my_commissions",
+      session_token: token
+    });
+
+    if (result.success !== true) {
+      throw new Error(result.error || "No se pudieron consultar las comisiones.");
+    }
+
+    const resumen = result.resumen || {};
+    const comisiones = Array.isArray(result.comisiones)
+      ? result.comisiones
+      : [];
+
+    const dinero = valor => formatoPrecio(Number(valor) || 0);
+
+    container.innerHTML = `
+      <article style="background:#edf5ef;border-radius:10px;padding:14px;display:grid;gap:8px">
+        <strong>Resumen de tus comisiones</strong>
+        <div>Pendiente del pago del cliente: <strong>${dinero(resumen.pendiente_pago_cliente)}</strong></div>
+        <div>Disponible para cobrar: <strong>${dinero(resumen.disponible)}</strong></div>
+        <div>Total pagado históricamente: <strong>${dinero(resumen.pagado)}</strong></div>
+      </article>
+      <h4 style="margin:4px 0">Historial de comisiones</h4>
+      ${
+        comisiones.length
+          ? comisiones.map(c => `
+            <article style="background:white;border:1px solid #d7e1da;border-radius:10px;padding:12px;display:grid;gap:6px">
+              <strong>${dinero(c.commission_amount)}</strong>
+              <div>Base del servicio: ${dinero(c.service_price)}</div>
+              <div>Porcentaje: ${Number(c.commission_rate) || 0}%</div>
+              <div>Estado: ${
+                ({
+                  pendiente_revision: "Pendiente de revisión",
+                  pendiente_pago_cliente: "Pendiente del pago del cliente",
+                  a_pagar: "Disponible para cobrar",
+                  pagada: "Pagada"
+                })[c.status] || escaparHTML(c.status || "Sin estado")
+              }</div>
+              <div>Fecha: ${c.created_at
+                ? escaparHTML(new Date(c.created_at).toLocaleString("es-PA", {
+                    timeZone: "America/Panama"
+                  }))
+                : "No disponible"}</div>
+              ${c.paid_at
+                ? `<div>Pago registrado: ${escaparHTML(new Date(c.paid_at).toLocaleString("es-PA", {
+                    timeZone: "America/Panama"
+                  }))}</div>`
+                : ""}
+              ${c.payment_notes
+                ? `<div>Nota: ${escaparHTML(c.payment_notes)}</div>`
+                : ""}
+            </article>
+          `).join("")
+          : "<p>Todavía no tienes comisiones registradas.</p>"
+      }
+    `;
+  } catch (error) {
+    container.innerHTML = `
+      <p role="status">${escaparHTML(
+        error.message || "No se pudieron consultar tus comisiones."
+      )}</p>
+    `;
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
