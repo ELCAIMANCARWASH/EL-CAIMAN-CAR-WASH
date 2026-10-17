@@ -318,7 +318,21 @@ async function mostrarCliente() {
           <label>Fecha solicitada<input id="ccw-booking-date" type="date" required style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Hora solicitada<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona una fecha primero</option></select></label>
           <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
-          <p class="notice">Horario de atención publicado: 8:00 a. m. a 6:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. El horario final depende de la disponibilidad real.</p>
+          <p class="notice">Horario de atención publicado: 8:00 a. m. a 6:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. El horario final depende de la disponibilidad real.</p>  
+<label for="ccw-payment-method" style="display:block;font-weight:600">
+  Método de pago (obligatorio)
+  <select
+    id="ccw-payment-method"
+    name="payment_method"
+    required
+    style="display:block;width:100%;padding:12px;margin-top:5px"
+  >
+    <option value="">Selecciona un método de pago</option>
+    <option value="yappy">Yappy</option>
+    <option value="ach">ACH</option>
+    <option value="efectivo">Efectivo</option>
+  </select>
+</label>
           <button id="ccw-submit-booking" class="button" type="submit" style="margin-top:0">Solicitar cita</button>
           <p id="ccw-booking-message" role="status" aria-live="polite"></p>
         </form>
