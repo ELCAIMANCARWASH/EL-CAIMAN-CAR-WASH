@@ -1522,12 +1522,18 @@ async function cargarTrabajosLavador() {
     </main>`;
 
   document.getElementById("ccw-refresh-jobs").onclick = cargarTrabajosLavador;
-  
+
+  // Conectar el botón después de crear el panel del lavador.
+  const botonComisiones = document.getElementById("ccw-refresh-commissions");
+  if (botonComisiones) botonComisiones.onclick = cargarComisionesLavador;
+  // Consultar las comisiones al abrir o actualizar el panel.
+  cargarComisionesLavador();
+
   document.getElementById("ccw-washer-logout").onclick = () => {
     borrarSesionLavador();
     mostrarInicio();
   };
-    
+
   try {
     
     const result = await llamarFuncion({ action: "my_jobs", session_token: token });
@@ -1651,9 +1657,6 @@ async function cargarTrabajosLavador() {
   }
 }
 
-const botonComisiones = document.getElementById("ccw-refresh-commissions");
-if (botonComisiones) botonComisiones.onclick = cargarComisionesLavador;
-cargarComisionesLavador();
 async function cargarComisionesLavador() {
   const token = sessionStorage.getItem("ccw_washer_session");
   const container = document.getElementById("ccw-commissions");
