@@ -597,7 +597,11 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
     submit.disabled = true;
     try {
       const tariff = tariffSelect.value === "" ? null : allTariffs[Number(tariffSelect.value)];
-      if (!tariff) throw new Error("Selecciona un servicio y una tarifa confirmada.");
+      if (!tariff) throw new Error("Selecciona un servicio y una tarifa confirmada.");  
+const customerEmail = document.getElementById("ccw-customer-email").value.trim();
+if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+  throw new Error("Introduce un correo electrónico válido.");
+}
       if (!tariff.isVehicle) throw new Error("Este servicio no se puede reservar en línea todavía. Consulta a la Administradora para confirmar la cita.");
       if (!vehicleTypeSelect.value) throw new Error("Selecciona el tipo de vehículo.");
       if (!plateInput.value.trim()) throw new Error("La placa es obligatoria.");
@@ -606,7 +610,7 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
       const booking = {
         customer_name: document.getElementById("ccw-customer-name").value.trim(),
         customer_phone: document.getElementById("ccw-customer-phone").value.trim(),
-        customer_email: document.getElementById("ccw-customer-email").value.trim() || null,
+        customer_email: customerEmail,
         customer_address: document.getElementById("ccw-customer-address").value.trim(),
         appointment_date: dateInput.value,
         requested_start_time: timeSelect.value,
