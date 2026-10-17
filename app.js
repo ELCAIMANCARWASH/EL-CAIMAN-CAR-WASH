@@ -739,7 +739,10 @@ async function cargarReservasAdmin() {
   return Array.isArray(data.reservas) ? data.reservas : [];
 }
 
-function mostrarReservasAdmin(reservas) {
+let ccwReservasCache = [];
+let ccwReservasPagina = 1;
+
+function renderReservasAdmin(reservas) {
   const container = document.getElementById("ccw-reservas-lista");
   if (!container) return;
   if (!reservas.length) {
@@ -897,6 +900,37 @@ function mostrarReservasAdmin(reservas) {
     };
   });
 }
+function mostrarReservasAdmin(reservas) {
+  ccwReservasCache = Array.isArray(reservas) ? reservas : [];
+  const search = document.getElementById("ccw-reservas-search");
+  const status = document.getElementById("ccw-reservas-filter");
+  const pageSizeEl = document.getElementById("ccw-reservas-page-size");
+  const query = String(search?.value || "").trim().toLowerCase();
+  const selectedStatus = String(status?.value || "todos").toLowerCase();
+  const pageSize = Math.max(1, Number(pageSizeEl?.value || 10));
+  const filtered = ccwReservasCache.filter(r => {
+    const vehicles = Array.isArray(r.vehicles) ? r.vehicles : [];
+    const text = [r.booking_code, r.customer_name, r.customer_phone, r.customer_email, r.customer_address, r.house_number, ...vehicles.flatMap(v => [v.license_plate, v.service_name, v.washer_name])].filter(Boolean).join(" ").toLowerCase();
+    const statuses = vehicles.map(v => String(v.assignment_status || v.status || "").toLowerCase());
+    const done = statuses.length && statuses.every(x => ["terminada","terminado","completada","completado"].includes(x));
+    const cancelled = /cancel/.test(String(r.status || "").toLowerCase()) || statuses.some(x => /cancel/.test(x));
+    const matchesStatus = selectedStatus === "todos" || (selectedStatus === "completadas" && done) || (selectedStatus === "canceladas" && cancelled) || (selectedStatus === "pendientes" && !done && !cancelled);
+    return text.includes(query) && matchesStatus;
+  });
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  ccwReservasPagina = Math.min(ccwReservasPagina, pages);
+  const start = (ccwReservasPagina - 1) * pageSize;
+  renderReservasAdmin(filtered.slice(start, start + pageSize));
+  const info = document.getElementById("ccw-reservas-pagination-info");
+  if (info) info.textContent = filtered.length ? `Mostrando ${start + 1}–${Math.min(start + pageSize, filtered.length)} de ${filtered.length} reservas` : "No hay reservas que coincidan con la búsqueda.";
+  const prev = document.getElementById("ccw-reservas-prev");
+  const next = document.getElementById("ccw-reservas-next");
+  const page = document.getElementById("ccw-reservas-page");
+  if (prev) prev.disabled = ccwReservasPagina <= 1;
+  if (next) next.disabled = ccwReservasPagina >= pages;
+  if (page) page.textContent = `Página ${ccwReservasPagina} de ${pages}`;
+}
+
 async function actualizarReservasAdmin() {
   const message = document.getElementById("ccw-reservas-message");
   const button = document.getElementById("ccw-reservas-refresh");
@@ -1201,16 +1235,33 @@ function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
     ${cabecera("Panel administrativo")}
-    <main style="max-width:620px;margin:32px auto;padding:20px;display:grid;gap:14px">
-      <h2>Bienvenida, ${escaparHTML(profile.full_name || "Administradora")}</h2>
-      <p>Sesión autenticada como administradora.</p>
-      <section style="display:grid;gap:10px;background:#fff8e8;border-radius:12px;padding:16px">
+    <style>
+      .ccw-admin-layout{max-width:1440px;margin:0 auto;padding:20px;display:grid;grid-template-columns:245px minmax(0,1fr);gap:20px;align-items:start}
+      .ccw-admin-sidebar{position:sticky;top:12px;background:#10251d;color:white;border-radius:14px;padding:14px;display:grid;gap:7px}
+      .ccw-admin-nav{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px;border:0;border-radius:8px;background:transparent;color:white;font-size:14px;font-weight:700;cursor:pointer}
+      .ccw-admin-nav[aria-current="page"]{background:#18764e}
+      .ccw-admin-content{min-width:0;display:grid;gap:14px}
+      .ccw-admin-section{min-width:0}
+      @media(max-width:760px){.ccw-admin-layout{grid-template-columns:1fr;padding:12px}.ccw-admin-sidebar{position:static}.ccw-admin-nav-wrap{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.ccw-admin-nav{font-size:12px;padding:10px 8px}.ccw-admin-content{gap:12px}}
+      </style>
+      <div class="ccw-admin-layout">
+      <aside class="ccw-admin-sidebar"><strong style="padding:8px 10px;font-size:16px">MENÚ ADMINISTRATIVO</strong><nav class="ccw-admin-nav-wrap" style="display:grid;gap:5px">
+      <button class="ccw-admin-nav" data-admin-section="reservas" aria-current="page">▦ Reservas de clientes</button>
+      <button class="ccw-admin-nav" data-admin-section="comisiones">＄ Comisiones</button>
+      <button class="ccw-admin-nav" data-admin-section="lavadores">♙ Registro de lavadores</button>
+      <button class="ccw-admin-nav" data-admin-section="jornadas">◷ Jornada y disponibilidad</button>
+      <button class="ccw-admin-nav" data-admin-section="pin">⚿ Generar PIN</button>
+      <button class="ccw-admin-nav" data-admin-section="notificaciones">♧ Notificaciones</button>
+      </nav><button id="ccw-logout" type="button" style="padding:11px;border:1px solid #739080;border-radius:8px;background:transparent;color:white;font-weight:bold;cursor:pointer">Cerrar sesión</button><button id="ccw-home" type="button" style="padding:11px;border:0;border-radius:8px;background:#e8f2ec;color:#183126;font-weight:bold;cursor:pointer">Volver al inicio</button></aside>
+      <main class="ccw-admin-content">
+      <header style="background:white;border:1px solid #d8e2dc;border-radius:12px;padding:16px"><h2 style="margin:0 0 6px">Bienvenida, ${escaparHTML(profile.full_name || "Administradora")}</h2><p style="margin:0">Sesión autenticada como administradora.</p></header>
+      <section id="ccw-admin-notificaciones" class="ccw-admin-section" style="display:grid;gap:10px;background:#fff8e8;border-radius:12px;padding:16px">
         <h3 style="margin:0">Notificaciones en este iPhone</h3>
         <p style="margin:0">Activa las alertas de nuevas reservas en este dispositivo.</p>
         <button id="ccw-push-enable" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Activar notificaciones</button>
         <p id="ccw-push-message" role="status" style="margin:0"></p>
       </section>
-      <section style="display:grid;gap:10px;background:#fff;border:1px solid #d8e2dc;border-radius:12px;padding:16px">
+      <section id="ccw-admin-comisiones" class="ccw-admin-section" style="display:grid;gap:10px;background:#fff;border:1px solid #d8e2dc;border-radius:12px;padding:16px">
         <h3 style="margin:0">Comisiones de lavadores · 40 %</h3>
         <p style="margin:0">Las comisiones se generan al terminar el servicio. Solo pasan a «A pagar» cuando el pago confirmado cubre el total de la reserva.</p>
         <button id="ccw-commissions-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar comisiones</button>
@@ -1218,14 +1269,20 @@ function mostrarPanelAdmin(profile) {
         <div id="ccw-commissions-summary" style="display:grid;gap:6px"></div>
         <div id="ccw-commissions-list" style="display:grid;gap:8px"></div>
       </section>
-      <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
+      <section id="ccw-admin-reservas" class="ccw-admin-section" style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
         <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+          <input id="ccw-reservas-search" type="search" placeholder="Buscar código, cliente o placa" style="padding:11px;border:1px solid #b9c9bf;border-radius:8px;min-width:0">
+          <select id="ccw-reservas-filter" style="padding:11px;border:1px solid #b9c9bf;border-radius:8px"><option value="todos">Todos los estados</option><option value="pendientes">Pendientes</option><option value="completadas">Completadas</option><option value="canceladas">Canceladas</option></select>
+          <select id="ccw-reservas-page-size" style="padding:11px;border:1px solid #b9c9bf;border-radius:8px"><option value="10">10 por página</option><option value="20">20 por página</option><option value="50">50 por página</option></select>
+        </div>
         <button id="ccw-reservas-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar reservas</button>
         <p id="ccw-reservas-message" role="status" style="margin:0">Pulsa Actualizar reservas para consultar las citas.</p>
         <div id="ccw-reservas-lista" style="display:grid;gap:10px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><small id="ccw-reservas-pagination-info" role="status"></small><div style="display:flex;align-items:center;gap:8px"><button id="ccw-reservas-prev" type="button" style="padding:9px 12px" disabled>Anterior</button><strong id="ccw-reservas-page" style="font-size:12px">Página 1</strong><button id="ccw-reservas-next" type="button" style="padding:9px 12px">Siguiente</button></div></div>
       </section>
-      <section style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
+      <section id="ccw-admin-lavadores" class="ccw-admin-section" style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
         <h3 style="margin:0">Registro de lavadores</h3>
         <label>Nombre completo<input id="ccw-new-washer-name" maxlength="120" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
         <label>Fecha de ingreso<input id="ccw-new-washer-date" type="date" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
@@ -1234,7 +1291,7 @@ function mostrarPanelAdmin(profile) {
         <button id="ccw-refresh-washers" type="button" style="padding:12px">Actualizar lista de lavadores</button>
         <p id="ccw-washers-message" role="status"></p><div id="ccw-washers-list" style="display:grid;gap:8px"></div>
       </section>
-      <section style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
+      <section id="ccw-admin-jornadas" class="ccw-admin-section" style="display:grid;gap:10px;background:#fff;border-radius:12px;padding:16px">
         <h3 style="margin:0">Jornadas y disponibilidad</h3>
         <label>Fecha de la jornada<input id="ccw-plan-date" type="date" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Apertura<input id="ccw-plan-open" type="time" value="07:00" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label><label>Cierre<input id="ccw-plan-close" type="time" value="18:00" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></label></div>
@@ -1243,6 +1300,7 @@ function mostrarPanelAdmin(profile) {
         <button id="ccw-publish-plan" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Publicar jornada</button>
         <p id="ccw-plan-message" role="status"></p><button id="ccw-refresh-plans" type="button" style="padding:12px">Consultar jornadas publicadas</button><div id="ccw-plans-list" style="display:grid;gap:8px"></div>
       </section>
+      <section id="ccw-admin-pin" class="ccw-admin-section" style="display:grid;gap:10px;background:white;border:1px solid #d8e2dc;border-radius:12px;padding:16px"><h3 style="margin:0">Generar PIN</h3>
       <label for="ccw-washer">Seleccionar lavador</label>
       <select id="ccw-washer" style="padding:12px">
         <option value="">Cargando lavadores…</option>
@@ -1252,10 +1310,21 @@ function mostrarPanelAdmin(profile) {
       </label>
       ${boton("Generar PIN para esta fecha", "ccw-generate-pin")}
       <button id="ccw-revoke-pin" type="button" style="padding:12px;background:#a52828;color:white;border:0;border-radius:8px;font-weight:bold">Revocar PIN de esta fecha</button>
-      <p id="ccw-pin-message" role="status"></p>
-      <button id="ccw-logout" type="button" style="padding:12px">Cerrar sesión</button>
-      <button id="ccw-home" type="button" style="padding:12px">Volver al inicio</button>
-    </main>`;
+      <p id="ccw-pin-message" role="status"></p></section>
+      </main></div>`;
+
+  const adminSectionIds = { reservas: "ccw-admin-reservas", comisiones: "ccw-admin-comisiones", lavadores: "ccw-admin-lavadores", jornadas: "ccw-admin-jornadas", pin: "ccw-admin-pin", notificaciones: "ccw-admin-notificaciones" };
+  function seleccionarSeccionAdmin(key) {
+    Object.entries(adminSectionIds).forEach(([name, id]) => { const section = document.getElementById(id); if (section) section.style.display = name === key ? "grid" : "none"; });
+    document.querySelectorAll("[data-admin-section]").forEach(btn => { if (btn.dataset.adminSection === key) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current"); });
+  }
+  document.querySelectorAll("[data-admin-section]").forEach(btn => btn.addEventListener("click", () => seleccionarSeccionAdmin(btn.dataset.adminSection)));
+  document.getElementById("ccw-reservas-search").addEventListener("input", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
+  document.getElementById("ccw-reservas-filter").addEventListener("change", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
+  document.getElementById("ccw-reservas-page-size").addEventListener("change", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
+  document.getElementById("ccw-reservas-prev").onclick = () => { ccwReservasPagina = Math.max(1, ccwReservasPagina - 1); mostrarReservasAdmin(ccwReservasCache); };
+  document.getElementById("ccw-reservas-next").onclick = () => { ccwReservasPagina++; mostrarReservasAdmin(ccwReservasCache); };
+  seleccionarSeccionAdmin("reservas");
 
   const partesFechaPanama = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Panama", year: "numeric", month: "2-digit", day: "2-digit"
