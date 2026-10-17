@@ -922,6 +922,52 @@ function base64UrlToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(char => char.charCodeAt(0)));
 }
 
+async function cargarComisionesAdmin() {
+  const token = sessionStorage.getItem("ccw_access_token");
+  if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "listar_comisiones" })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudieron consultar las comisiones.");
+  return Array.isArray(data.commissions) ? data.commissions : [];
+}
+
+async function actualizarComisionesAdmin() {
+  const msg = document.getElementById("ccw-commissions-message");
+  const summary = document.getElementById("ccw-commissions-summary");
+  const list = document.getElementById("ccw-commissions-list");
+  const button = document.getElementById("ccw-commissions-refresh");
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = "Consultando comisiones…";
+  try {
+    const rows = await cargarComisionesAdmin();
+    const money = n => formatoPrecio(Number(n) || 0);
+    const sum = status => rows.filter(c => c.status === status).reduce((s,c) => s + Number(c.commission_amount || 0), 0);
+    if (summary) summary.innerHTML = `<div><strong>Pendiente del pago del cliente:</strong> ${money(sum("pendiente_pago_cliente"))}</div><div><strong>A pagar:</strong> ${money(sum("a_pagar"))}</div><div><strong>Pagado históricamente:</strong> ${money(sum("pagada"))}</div>`;
+    if (list) list.innerHTML = rows.map(c => `<article style="border:1px solid #d8e2dc;border-radius:8px;padding:10px;display:grid;gap:5px"><strong>${escaparHTML(c.washer_name)} · ${money(c.commission_amount)}</strong><div>Servicio: ${escaparHTML(c.service_name)}</div><div>Base: ${money(c.service_price)} · Comisión: ${Number(c.commission_rate)}%</div><div>Estado: <strong>${({pendiente_revision:"Pendiente de revisión",pendiente_pago_cliente:"Pendiente del pago del cliente",a_pagar:"A pagar",pagada:"Pagada"})[c.status] || escaparHTML(c.status)}</strong></div>${c.paid_at ? `<div>Pagada: ${escaparHTML(new Date(c.paid_at).toLocaleString("es-PA",{timeZone:"America/Panama"}))}</div>` : ""}${c.status === "a_pagar" ? `<label>Nota del pago (opcional)<input data-commission-note="${escaparHTML(c.id)}" maxlength="1000" style="display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px"></label><button type="button" data-pay-commission="${escaparHTML(c.id)}" style="padding:10px;background:#18764e;color:white;border:0;border-radius:7px;font-weight:bold">Registrar pago al lavador</button><p data-commission-msg="${escaparHTML(c.id)}" role="status" style="margin:0"></p>` : c.status === "pagada" && c.payment_notes ? `<div>Nota: ${escaparHTML(c.payment_notes)}</div>` : ""}</article>`).join("") || '<p>No hay comisiones registradas todavía.</p>';
+    list?.querySelectorAll("[data-pay-commission]").forEach(btn => btn.onclick = async () => {
+      const id = btn.dataset.payCommission;
+      const output = list.querySelector(`[data-commission-msg="${id}"]`);
+      const note = list.querySelector(`[data-commission-note="${id}"]`)?.value || "";
+      if (!confirm("¿Confirmas que ya pagaste esta comisión al lavador? Esta acción quedará registrada en el historial.")) return;
+      btn.disabled = true;
+      try {
+        const token = sessionStorage.getItem("ccw_access_token");
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, { method:"POST", headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${token}`,"Content-Type":"application/json"}, body:JSON.stringify({action:"pagar_comision",commission_id:id,payment_notes:note}) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo registrar el pago.");
+        if (output) output.textContent = "Pago registrado.";
+        await actualizarComisionesAdmin();
+      } catch (e) { if (output) output.textContent = e.message || "Error al registrar el pago."; btn.disabled = false; }
+    });
+    if (msg) msg.textContent = `Comisiones consultadas: ${rows.length}.`;
+  } catch (e) { if (msg) msg.textContent = e.message || "No se pudieron consultar las comisiones."; }
+  finally { if (button) button.disabled = false; }
+}
+
 async function activarNotificacionesAdmin() {
   const output = document.getElementById("ccw-push-message");
   const button = document.getElementById("ccw-push-enable");
@@ -1164,6 +1210,14 @@ function mostrarPanelAdmin(profile) {
         <button id="ccw-push-enable" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Activar notificaciones</button>
         <p id="ccw-push-message" role="status" style="margin:0"></p>
       </section>
+      <section style="display:grid;gap:10px;background:#fff;border:1px solid #d8e2dc;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Comisiones de lavadores · 40 %</h3>
+        <p style="margin:0">Las comisiones se generan al terminar el servicio. Solo pasan a «A pagar» cuando el pago confirmado cubre el total de la reserva.</p>
+        <button id="ccw-commissions-refresh" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Actualizar comisiones</button>
+        <p id="ccw-commissions-message" role="status" style="margin:0"></p>
+        <div id="ccw-commissions-summary" style="display:grid;gap:6px"></div>
+        <div id="ccw-commissions-list" style="display:grid;gap:8px"></div>
+      </section>
       <section style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Reservas de clientes</h3>
         <p style="margin:0">Consulta los datos del cliente, el código, el servicio, el precio y el horario asignado.</p>
@@ -1225,6 +1279,8 @@ function mostrarPanelAdmin(profile) {
 
   document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
+  document.getElementById("ccw-commissions-refresh").onclick = actualizarComisionesAdmin;
+  actualizarComisionesAdmin();
   actualizarReservasAdmin();
 
   document.getElementById("ccw-generate-pin").onclick = async event => {
