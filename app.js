@@ -1651,7 +1651,8 @@ async function cargarTrabajosLavador() {
   }
 }
 
-document.getElementById("ccw-refresh-commissions").onclick = cargarComisionesLavador;
+const botonComisiones = document.getElementById("ccw-refresh-commissions");
+if (botonComisiones) botonComisiones.onclick = cargarComisionesLavador;
 cargarComisionesLavador();
 async function cargarComisionesLavador() {
   const token = sessionStorage.getItem("ccw_washer_session");
