@@ -318,7 +318,7 @@ async function mostrarCliente() {
           <label>Fecha solicitada<input id="ccw-booking-date" type="date" required style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Hora solicitada<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona una fecha primero</option></select></label>
           <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
-          <p class="notice">Horario de atención publicado: 8:00 a. m. a 6:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. El horario final depende de la disponibilidad real.</p>  
+          <p class="notice">Horario de atención: 8:00 a. m. a 10:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. Las citas dependen de la duración del servicio y de la disponibilidad real del personal.</p>  
 <label for="ccw-payment-method" style="display:block;font-weight:600">
   Método de pago (obligatorio)
   <select
@@ -564,7 +564,7 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
     // Horas solicitables cada 30 minutos. La función SQL valida disponibilidad
     // real y puede rechazar un horario ocupado o sin plan publicado.
     timeSelect.add(new Option("Selecciona una hora", ""));
-    for (let minutes = 8 * 60; minutes <= 16 * 60 + 30; minutes += 30) {
+    for (let minutes = 8 * 60; minutes <= 20 * 60 + 30; minutes += 30) {
       const h = String(Math.floor(minutes / 60)).padStart(2, "0");
       const m = String(minutes % 60).padStart(2, "0");
       const value = `${h}:${m}`;
