@@ -865,18 +865,29 @@ async function cargarDisponibilidadJornadaAdmin() {
   const msg = document.getElementById("ccw-plan-message");
   const dateInput = document.getElementById("ccw-plan-date");
   const planList = document.getElementById("ccw-plan-washer-list");
+  const openingInput = document.getElementById("ccw-plan-open");
+  const closingInput = document.getElementById("ccw-plan-close");
+  const notesInput = document.getElementById("ccw-plan-notes");
   const planDate = dateInput?.value;
   if (!planDate || !planList) return;
 
   try {
     const result = await llamarAdminLavador({ action: "get_plan_availability", plan_date: planDate });
-    // Si no hay jornada guardada para esa fecha, se conserva el formulario inicial.
+
+    if (!result || result.success !== true) {
+      throw new Error(result?.error || "El servidor no confirmó la consulta de disponibilidad.");
+    }
+
     if (!result.plan) {
-      // Fecha nueva: valores iniciales explícitos, sin reutilizar datos de otra fecha.
+      // Fecha nueva: no reutilizar el horario ni las notas de otra jornada.
+      if (openingInput) openingInput.value = "07:00";
+      if (closingInput) closingInput.value = "18:00";
+      if (notesInput) notesInput.value = "";
       for (const box of planList.querySelectorAll("[data-plan-washer]")) {
         box.checked = true;
-        const start = planList.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`);
-        const end = planList.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`);
+        const washerId = box.dataset.planWasher;
+        const start = planList.querySelector(`[data-plan-start="${washerId}"]`);
+        const end = planList.querySelector(`[data-plan-end="${washerId}"]`);
         if (start) start.value = "07:00";
         if (end) end.value = "18:00";
       }
@@ -884,20 +895,37 @@ async function cargarDisponibilidadJornadaAdmin() {
       return;
     }
 
-    const saved = new Map((result.availability || []).map(row => [row.washer_id, row]));
+    // Recupera también el horario general y las notas de la jornada existente.
+    if (openingInput && result.plan.opening_time) {
+      openingInput.value = String(result.plan.opening_time).slice(0, 5);
+    }
+    if (closingInput && result.plan.closing_time) {
+      closingInput.value = String(result.plan.closing_time).slice(0, 5);
+    }
+    if (notesInput) notesInput.value = result.plan.notes || "";
+
+    const saved = new Map((Array.isArray(result.availability) ? result.availability : [])
+      .map(row => [row.washer_id, row]));
+
     for (const box of planList.querySelectorAll("[data-plan-washer]")) {
-      const row = saved.get(box.dataset.planWasher);
+      const washerId = box.dataset.planWasher;
+      const row = saved.get(washerId);
+      const start = planList.querySelector(`[data-plan-start="${washerId}"]`);
+      const end = planList.querySelector(`[data-plan-end="${washerId}"]`);
+
       if (!row) {
         box.checked = false;
+        // Mantiene horas válidas para que la API pueda validar también a los no disponibles.
+        if (start && !start.value) start.value = "07:00";
+        if (end && !end.value) end.value = "18:00";
         continue;
       }
+
       box.checked = row.available === true;
-      const start = planList.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`);
-      const end = planList.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`);
       if (start && row.start_time) start.value = String(row.start_time).slice(0, 5);
       if (end && row.end_time) end.value = String(row.end_time).slice(0, 5);
     }
-    if (msg) msg.textContent = `Disponibilidad guardada cargada para ${planDate}. Revisa los lavadores antes de publicar.`;
+    if (msg) msg.textContent = `Jornada existente cargada para ${planDate}. Revisa los horarios y la disponibilidad antes de publicar.`;
   } catch (error) {
     if (msg) msg.textContent = `No se pudo cargar la disponibilidad guardada: ${error.message}. No publiques hasta verificarla.`;
     // Evita presentar como confirmados datos que no se pudieron recuperar.
@@ -908,34 +936,44 @@ async function cargarDisponibilidadJornadaAdmin() {
 async function publicarJornadaAdmin() {
   const msg = document.getElementById("ccw-plan-message");
   const button = document.getElementById("ccw-publish-plan");
-  if (!msg || !button) return;
+  const dateInput = document.getElementById("ccw-plan-date");
+  const openingInput = document.getElementById("ccw-plan-open");
+  const closingInput = document.getElementById("ccw-plan-close");
+  const notesInput = document.getElementById("ccw-plan-notes");
+  const planList = document.getElementById("ccw-plan-washer-list");
+
+  if (!msg || !button || !dateInput || !openingInput || !closingInput || !notesInput || !planList) {
+    console.error("No se pudo publicar la jornada: faltan elementos del formulario administrativo.");
+    return;
+  }
 
   button.disabled = true;
-  msg.textContent = "Publicando jornada y verificando el resultado…";
+  msg.textContent = "Validando jornada y disponibilidad…";
 
   try {
-    const planDate = document.getElementById("ccw-plan-date")?.value;
-    const openingTime = document.getElementById("ccw-plan-open")?.value;
-    const closingTime = document.getElementById("ccw-plan-close")?.value;
-    const notes = document.getElementById("ccw-plan-notes")?.value || "";
+    const planDate = dateInput.value;
+    const openingTime = openingInput.value;
+    const closingTime = closingInput.value;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(planDate || "")) {
       throw new Error("Selecciona una fecha válida para la jornada.");
     }
     if (!openingTime || !closingTime || openingTime >= closingTime) {
-      throw new Error("Revisa el horario: la hora de cierre debe ser posterior a la apertura.");
+      throw new Error("El horario general de apertura y cierre no es válido.");
     }
 
-    const availability = [...document.querySelectorAll("[data-plan-washer]")].map(box => {
+    const availability = [...planList.querySelectorAll("[data-plan-washer]")].map(box => {
       const washerId = box.dataset.planWasher;
-      const startInput = document.querySelector(`[data-plan-start="${washerId}"]`);
-      const endInput = document.querySelector(`[data-plan-end="${washerId}"]`);
-      if (!startInput || !endInput) {
-        throw new Error("Faltan las horas de disponibilidad de uno de los lavadores. Recarga el panel y vuelve a intentarlo.");
+      const startInput = planList.querySelector(`[data-plan-start="${washerId}"]`);
+      const endInput = planList.querySelector(`[data-plan-end="${washerId}"]`);
+
+      if (!washerId || !startInput || !endInput) {
+        throw new Error("Falta el identificador o el horario de uno de los lavadores. Actualiza la lista e inténtalo de nuevo.");
       }
-      if (box.checked && (!startInput.value || !endInput.value || startInput.value >= endInput.value)) {
-        throw new Error("Cada lavador marcado como disponible debe tener horas de inicio y fin válidas.");
+      if (!startInput.value || !endInput.value || startInput.value >= endInput.value) {
+        throw new Error(`Revisa el horario individual del lavador ${washerId}.`);
       }
+
       return {
         washer_id: washerId,
         available: box.checked,
@@ -945,47 +983,50 @@ async function publicarJornadaAdmin() {
       };
     });
 
-    if (!availability.length) throw new Error("No hay lavadores cargados. Activa al menos uno antes de publicar.");
-    if (!availability.some(a => a.available)) throw new Error("Selecciona al menos un lavador disponible.");
+    if (!availability.length) {
+      throw new Error("No hay lavadores en la lista. Registra o actualiza los lavadores antes de publicar.");
+    }
+    if (!availability.some(item => item.available)) {
+      throw new Error("Selecciona al menos un lavador disponible.");
+    }
 
     const result = await llamarAdminLavador({
       action: "publish_plan",
       plan_date: planDate,
       opening_time: openingTime,
       closing_time: closingTime,
-      notes,
+      notes: notesInput.value,
       availability
     });
 
-    if (result?.error) throw new Error(result.error);
-    if (result?.success === false || result?.published === false) {
-      throw new Error(result.message || "El servidor no confirmó la publicación de la jornada.");
+    // No mostrar éxito si el servidor no confirma que publicó la jornada.
+    if (result?.success !== true || !result.plan?.published_at || !result.plan?.published_by) {
+      throw new Error(result?.error || "El servidor no confirmó la publicación de la jornada.");
     }
 
-    msg.textContent = result?.message || "Solicitud recibida. Verificando el estado guardado…";
     await cargarJornadasAdmin();
-
-    const listResult = await llamarAdminLavador({ action: "list_plans" });
-    const savedPlan = (listResult.plans || []).find(p => String(p.plan_date).slice(0, 10) === planDate);
-    if (!savedPlan) {
-      msg.textContent = "El servidor respondió, pero la jornada no aparece en la lista. No se pudo verificar la publicación.";
-    } else if (!savedPlan.published_at) {
-      msg.textContent = "La jornada sigue como borrador: el servidor no registró published_at. No figura como publicada.";
-    } else {
-      msg.textContent = `Jornada del ${planDate} publicada y verificada correctamente.`;
-    }
-  } catch (e) {
-    msg.textContent = `No se pudo confirmar la publicación: ${e?.message || "error desconocido"}`;
+    msg.textContent = `Jornada del ${planDate} publicada correctamente.`;
+  } catch (error) {
+    msg.textContent = error.message || "No se pudo publicar la jornada.";
   } finally {
     button.disabled = false;
   }
 }
+
 async function cargarJornadasAdmin() {
-  const list = document.getElementById("ccw-plans-list"); const msg = document.getElementById("ccw-plan-message");
+  const list = document.getElementById("ccw-plans-list");
+  const msg = document.getElementById("ccw-plan-message");
+  if (!list) return;
+
   try {
     const result = await llamarAdminLavador({ action: "list_plans" });
+    if (!result || result.success !== true) {
+      throw new Error(result?.error || "El servidor no confirmó la consulta de jornadas.");
+    }
     list.innerHTML = (result.plans || []).map(p => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px"><strong>${escaparHTML(p.plan_date)}</strong><div>${escaparHTML(String(p.opening_time).slice(0,5))}–${escaparHTML(String(p.closing_time).slice(0,5))}</div><div>${p.published_at ? "Publicada" : "Borrador"}</div>${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}</div>`).join("") || "No hay jornadas registradas.";
-  } catch(e) { msg.textContent = e.message; }
+  } catch (error) {
+    if (msg) msg.textContent = error.message || "No se pudieron consultar las jornadas.";
+  }
 }
 
 function mostrarPanelAdmin(profile) {
