@@ -753,11 +753,27 @@ function mostrarReservasAdmin(reservas) {
     if (statuses.some(s => ["en_proceso", "en proceso"].includes(s))) return "en proceso";
     return r.status || "sin estado";
   };
+  const metodoPagoVisible = value => ({
+    yappy: "Yappy",
+    ach: "ACH",
+    efectivo: "Efectivo"
+  })[String(value || "").trim().toLowerCase()] || "No registrado";
+  const estadoPagoVisible = value => ({
+    pendiente: "Pendiente",
+    confirmado: "Confirmado",
+    pagado: "Pagado",
+    rechazado: "Rechazado",
+    cancelado: "Cancelado",
+    reembolsado: "Reembolsado"
+  })[String(value || "").trim().toLowerCase()] || (value ? String(value) : "No registrado");
   container.innerHTML = reservas.map(r => {
     const address = r.customer_address || r.house_number || r.address || "No registrado";
     const vehicles = Array.isArray(r.vehicles) ? r.vehicles : [];
     const status = estadoVisible(r);
     const done = status.toLowerCase() === "terminada";
+    const paymentMethod = metodoPagoVisible(r.payment_method);
+    const paymentStatus = estadoPagoVisible(r.payment_status);
+    const paymentAmount = r.payment_amount ?? r.amount;
     return `
       <details style="background:#fff;border:1px solid #d8e2dc;border-radius:8px;padding:0 12px;margin:0 0 8px;overflow-wrap:anywhere;box-shadow:none;font-size:13px;line-height:1.35">
         <summary style="list-style:none;cursor:pointer;padding:10px 0;display:grid;gap:5px">
@@ -776,6 +792,12 @@ function mostrarReservasAdmin(reservas) {
         <div style="border-top:1px solid #e5ece7;padding:9px 0 11px;display:grid;gap:6px">
           <div><strong>Fecha de la reserva:</strong> ${escaparHTML(r.appointment_date || "—")}</div>
           <div><strong>Dirección completa:</strong> ${escaparHTML(address)}</div>
+          <section style="border:1px solid #d8e2dc;background:#f7faf8;border-radius:8px;padding:10px;display:grid;gap:5px;margin:4px 0">
+            <strong>Información de pago</strong>
+            <div><strong>Método de pago:</strong> ${escaparHTML(paymentMethod)}</div>
+            <div><strong>Estado del pago:</strong> ${escaparHTML(paymentStatus)}</div>
+            ${paymentAmount != null ? `<div><strong>Importe registrado:</strong> ${escaparHTML(formatoPrecio(Number(paymentAmount)))}</div>` : ""}
+          </section>
           ${vehicles.length ? vehicles.map(v => {
             const assignmentStatus = String(v.assignment_status || "").toLowerCase();
             const serviceDone = ["terminada", "terminado", "completada", "completado"].includes(assignmentStatus);
