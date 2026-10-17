@@ -907,22 +907,79 @@ async function cargarDisponibilidadJornadaAdmin() {
 
 async function publicarJornadaAdmin() {
   const msg = document.getElementById("ccw-plan-message");
-  const button = document.getElementById("ccw-publish-plan"); button.disabled = true;
-  try {
-    const availability = [...document.querySelectorAll("[data-plan-washer]")].map(box => ({
-      washer_id: box.dataset.planWasher,
-      available: box.checked,
-      start_time: document.querySelector(`[data-plan-start="${box.dataset.planWasher}"]`).value,
-      end_time: document.querySelector(`[data-plan-end="${box.dataset.planWasher}"]`).value,
-      absence_reason: box.checked ? null : "No disponible"
-    }));
-    if (!availability.some(a => a.available)) throw new Error("Selecciona al menos un lavador disponible.");
-    const result = await llamarAdminLavador({ action: "publish_plan", plan_date: document.getElementById("ccw-plan-date").value, opening_time: document.getElementById("ccw-plan-open").value, closing_time: document.getElementById("ccw-plan-close").value, notes: document.getElementById("ccw-plan-notes").value, availability });
-    msg.textContent = result.message || "Jornada publicada correctamente.";
-    await cargarJornadasAdmin();
-  } catch(e) { msg.textContent = e.message; } finally { button.disabled = false; }
-}
+  const button = document.getElementById("ccw-publish-plan");
+  if (!msg || !button) return;
 
+  button.disabled = true;
+  msg.textContent = "Publicando jornada y verificando el resultado…";
+
+  try {
+    const planDate = document.getElementById("ccw-plan-date")?.value;
+    const openingTime = document.getElementById("ccw-plan-open")?.value;
+    const closingTime = document.getElementById("ccw-plan-close")?.value;
+    const notes = document.getElementById("ccw-plan-notes")?.value || "";
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(planDate || "")) {
+      throw new Error("Selecciona una fecha válida para la jornada.");
+    }
+    if (!openingTime || !closingTime || openingTime >= closingTime) {
+      throw new Error("Revisa el horario: la hora de cierre debe ser posterior a la apertura.");
+    }
+
+    const availability = [...document.querySelectorAll("[data-plan-washer]")].map(box => {
+      const washerId = box.dataset.planWasher;
+      const startInput = document.querySelector(`[data-plan-start="${washerId}"]`);
+      const endInput = document.querySelector(`[data-plan-end="${washerId}"]`);
+      if (!startInput || !endInput) {
+        throw new Error("Faltan las horas de disponibilidad de uno de los lavadores. Recarga el panel y vuelve a intentarlo.");
+      }
+      if (box.checked && (!startInput.value || !endInput.value || startInput.value >= endInput.value)) {
+        throw new Error("Cada lavador marcado como disponible debe tener horas de inicio y fin válidas.");
+      }
+      return {
+        washer_id: washerId,
+        available: box.checked,
+        start_time: startInput.value,
+        end_time: endInput.value,
+        absence_reason: box.checked ? null : "No disponible"
+      };
+    });
+
+    if (!availability.length) throw new Error("No hay lavadores cargados. Activa al menos uno antes de publicar.");
+    if (!availability.some(a => a.available)) throw new Error("Selecciona al menos un lavador disponible.");
+
+    const result = await llamarAdminLavador({
+      action: "publish_plan",
+      plan_date: planDate,
+      opening_time: openingTime,
+      closing_time: closingTime,
+      notes,
+      availability
+    });
+
+    if (result?.error) throw new Error(result.error);
+    if (result?.success === false || result?.published === false) {
+      throw new Error(result.message || "El servidor no confirmó la publicación de la jornada.");
+    }
+
+    msg.textContent = result?.message || "Solicitud recibida. Verificando el estado guardado…";
+    await cargarJornadasAdmin();
+
+    const listResult = await llamarAdminLavador({ action: "list_plans" });
+    const savedPlan = (listResult.plans || []).find(p => String(p.plan_date).slice(0, 10) === planDate);
+    if (!savedPlan) {
+      msg.textContent = "El servidor respondió, pero la jornada no aparece en la lista. No se pudo verificar la publicación.";
+    } else if (!savedPlan.published_at) {
+      msg.textContent = "La jornada sigue como borrador: el servidor no registró published_at. No figura como publicada.";
+    } else {
+      msg.textContent = `Jornada del ${planDate} publicada y verificada correctamente.`;
+    }
+  } catch (e) {
+    msg.textContent = `No se pudo confirmar la publicación: ${e?.message || "error desconocido"}`;
+  } finally {
+    button.disabled = false;
+  }
+}
 async function cargarJornadasAdmin() {
   const list = document.getElementById("ccw-plans-list"); const msg = document.getElementById("ccw-plan-message");
   try {
