@@ -683,6 +683,14 @@ return true;
   try {
     message.textContent = "Cargando servicios y tarifas…";
     catalogServices = await cargarCatalogoPublico();
+    console.log(
+  "CATÁLOGO RECIBIDO:",
+  catalogServices.map(s => ({
+    nombre: s.name,
+    categoria: s.category,
+    tarifas: s.tarifas?.length
+  }))
+);
     // Guardamos las tarifas confirmadas en un índice estable para las opciones desplegables.
     allTariffs = [];
     message.textContent = catalogServices.length
