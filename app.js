@@ -382,6 +382,9 @@ async function mostrarCliente() {
   dateInput.min = panamaToday;
 
   function categoriaDeServicio(service) {
+    if (/limpieza express/i.test(String(service.name || ""))) {
+  return "interior";
+}
     const text = `${service.name || ""} ${service.description || service.descripcion || ""} ${service.category || ""}`
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     if (/colchon/.test(text)) return "colchones";
