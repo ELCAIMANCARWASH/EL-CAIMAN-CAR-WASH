@@ -301,7 +301,7 @@ async function mostrarCliente() {
           <p id="ccw-availability-message" class="notice" role="status" aria-live="polite">Selecciona un servicio y una fecha para consultar los cupos reales.</p>
           <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
           <p class="notice">Los horarios se calculan según la jornada publicada, los lavadores disponibles, la duración del servicio y las reservas existentes. La disponibilidad puede cambiar hasta que se confirme la reserva.</p>
-          <fieldset id="ccw-customer-details" hidden disabled style="display:none;border:1px solid #d7e1da;border-radius:10px;padding:14px;gap:12px">
+          <fieldset id="ccw-customer-details" style="display:grid;border:1px solid #d7e1da;border-radius:10px;padding:14px;gap:12px">
             <legend style="font-weight:700;padding:0 6px">Tus datos para confirmar la reserva</legend>
           <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
           <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
@@ -577,9 +577,11 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
   }
 
   function mostrarDatosCliente(visible) {
-    customerDetails.hidden = !visible;
-    customerDetails.style.display = visible ? "grid" : "none";
-    customerDetails.disabled = !visible;
+    // Los datos del cliente permanecen visibles en todo momento.
+    // Solo se habilita el envío cuando se ha seleccionado un horario disponible.
+    customerDetails.hidden = false;
+    customerDetails.style.display = "grid";
+    customerDetails.disabled = false;
     submit.disabled = !visible;
   }
 
