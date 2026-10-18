@@ -43,6 +43,7 @@ async function iniciarSesion(email, password) {
 
   try {
     const profile = await comprobarPerfilAdmin(data.access_token);
+    programarRenovacionSesionAdmin();
     return { user: data.user, perfil: profile };
   } catch (error) {
     cerrarSesion();
@@ -72,7 +73,70 @@ async function comprobarPerfilAdmin(token) {
   return profile;
 }
 
+let ccwAdminRefreshTimer = null;
+let ccwAdminRefreshPromise = null;
+
+function leerExpiracionTokenAdmin(token) {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(payload));
+    return Number(claims.exp || 0) * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+function programarRenovacionSesionAdmin() {
+  if (ccwAdminRefreshTimer) clearTimeout(ccwAdminRefreshTimer);
+  const token = sessionStorage.getItem("ccw_access_token");
+  const refreshToken = sessionStorage.getItem("ccw_refresh_token");
+  if (!token || !refreshToken) return;
+
+  // Renovar cinco minutos antes del vencimiento, manteniendo la sesión solo en esta pestaña.
+  const expiresAt = leerExpiracionTokenAdmin(token);
+  const delay = Math.max(15000, expiresAt ? expiresAt - Date.now() - 5 * 60 * 1000 : 15000);
+  ccwAdminRefreshTimer = setTimeout(renovarSesionAdmin, delay);
+}
+
+async function renovarSesionAdmin() {
+  if (ccwAdminRefreshPromise) return ccwAdminRefreshPromise;
+  ccwAdminRefreshPromise = (async () => {
+    const refreshToken = sessionStorage.getItem("ccw_refresh_token");
+    if (!refreshToken) return;
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.access_token || !data.refresh_token) {
+        const detail = String(data.error || data.error_description || data.msg || "");
+        // Si Supabase rechaza definitivamente el refresh token, exigir un nuevo inicio de sesión.
+        if (/invalid_grant|refresh token.*(invalid|not found|expired|reuse)/i.test(detail)) {
+          cerrarSesion();
+          return;
+        }
+        throw new Error(detail || "No se pudo renovar la sesión administrativa.");
+      }
+      sessionStorage.setItem("ccw_access_token", data.access_token);
+      sessionStorage.setItem("ccw_refresh_token", data.refresh_token);
+      programarRenovacionSesionAdmin();
+    } catch (error) {
+      console.warn("Renovación de sesión administrativa aplazada:", error.message);
+      if (sessionStorage.getItem("ccw_refresh_token")) {
+        if (ccwAdminRefreshTimer) clearTimeout(ccwAdminRefreshTimer);
+        ccwAdminRefreshTimer = setTimeout(renovarSesionAdmin, 30000);
+      }
+    }
+  })();
+  try { await ccwAdminRefreshPromise; }
+  finally { ccwAdminRefreshPromise = null; }
+}
+
 function cerrarSesion() {
+  if (ccwAdminRefreshTimer) clearTimeout(ccwAdminRefreshTimer);
+  ccwAdminRefreshTimer = null;
   sessionStorage.removeItem("ccw_access_token");
   sessionStorage.removeItem("ccw_refresh_token");
 }
@@ -89,10 +153,20 @@ async function obtenerSesionAdmin() {
   });
 
   if (!response.ok) {
-    cerrarSesion();
-    return null;
+    await renovarSesionAdmin();
+    const renewedToken = sessionStorage.getItem("ccw_access_token");
+    if (!renewedToken) return null;
+    const retry = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${renewedToken}` }
+    });
+    if (!retry.ok) { cerrarSesion(); return null; }
+    const perfil = await comprobarPerfilAdmin(renewedToken);
+    programarRenovacionSesionAdmin();
+    return { perfil, accessToken: renewedToken };
   }
-  return { perfil: await comprobarPerfilAdmin(token), accessToken: token };
+  const perfil = await comprobarPerfilAdmin(token);
+  programarRenovacionSesionAdmin();
+  return { perfil, accessToken: token };
 }
 
 async function generarPinLavador(washerId, planDate) {
