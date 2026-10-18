@@ -1838,9 +1838,11 @@ async function cargarComisionesLavador() {
         comisiones.length
           ? comisiones.map(c => `
             <article style="background:white;border:1px solid #d7e1da;border-radius:10px;padding:12px;display:grid;gap:6px">
-              <strong>${dinero(c.commission_amount)}</strong>
-              <div>Base del servicio: ${dinero(c.service_price)}</div>
-              <div>Porcentaje: ${Number(c.commission_rate) || 0}%</div>
+            <strong>Total ganado: ${dinero(Number(c.commission_amount || 0) + Number(c.commission_home_amount || 0))}</strong>
+            <div>Base del servicio: ${dinero(c.service_price)}</div>
+            <div>Porcentaje: ${Number(c.commission_rate) || 0}%</div>
+            <div>Comisión normal: ${dinero(c.commission_amount)}</div>
+            <div>Comisión por domicilio: ${dinero(c.commission_home_amount || 0)}</div>
               <div>Estado: ${
                 ({
                   pendiente_revision: "Pendiente de revisión",
