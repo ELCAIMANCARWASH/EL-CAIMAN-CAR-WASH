@@ -262,7 +262,7 @@ async function mostrarCliente() {
                 <option value="autos">Limpieza de autos</option>
                 <option value="muebles">Limpieza de muebles</option>
                 <option value="motor">Lavado de motor</option>
-                <option value="interior">Lavado de interior</option>
+                <option value="interior">Limpieza de interior</option>
                 <option value="lluvia">Tratamiento de lluvia ácida</option>
               </select>
             </label>
@@ -390,7 +390,7 @@ async function mostrarCliente() {
     if (/lluvia acida|lluvia/.test(text)) return "lluvia";
     const serviceName = String(service.name || "")
       .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
-    if (/interior/.test(serviceName)) return "interior";
+    if (/interior|limpieza express/.test(serviceName)) return "interior";
     if (/auto|vehiculo|car wash|lavado de autos|limpieza de autos/.test(text)) return "autos";
     // El campo category de Supabase puede clasificar servicios de autos con nombres propios.
     const cat = String(service.category || "")
@@ -526,12 +526,29 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
       const valid = t.reservable === true && t.precio !== null &&
         Number.isFinite(Number(t.precio)) && Number(t.precio) >= 0;
       if (!valid) return false;
-      // No mostrar una tarifa de Supabase que contradiga el Excel.
-      if (["motor", "interior", "lluvia"].includes(selectedCategory)) {
-        const expected = excelExpectedPrice(selectedCategory, t.tipo_vehiculo || vehicleTypeSelect.value);
-        return expected !== undefined && Number(t.precio) === expected;
-      }
-      return true;
+      // Validar los precios históricos de interior sin bloquear Limpieza Express.
+const nombreServicio = String(selectedService.name || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase();
+
+const validarPrecioExcel =
+  ["motor", "lluvia"].includes(selectedCategory) ||
+  (
+    selectedCategory === "interior" &&
+    nombreServicio === "lavado de interior"
+  );
+
+if (validarPrecioExcel) {
+  const expected = excelExpectedPrice(
+    selectedCategory,
+    t.tipo_vehiculo || vehicleTypeSelect.value
+  );
+
+  return expected !== undefined && Number(t.precio) === expected;
+}
+
+return true;
     });
     allTariffs = [];
 
