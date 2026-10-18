@@ -461,6 +461,17 @@ if (cat === "vehiculos") return "autos";
 
     // Catálogo público aprobado: no mostrar combos, POLISH ni servicios sin tarifas confirmadas.
     // No se borran registros históricos; el bloqueo se aplica en la web y en el catálogo de la función.
+    console.log(
+  "DIAGNÓSTICO INTERIOR:",
+  catalogServices
+    .filter(s => /interior|express/i.test(s.name || ""))
+    .map(s => ({
+      nombre: s.name,
+      categoriaCalculada: categoriaDeServicio(s),
+      categoriaSeleccionada: selectedCategory,
+      tarifas: s.tarifas
+    }))
+);
     let matchingServices = catalogServices.filter(s => {
       if (categoriaDeServicio(s) !== selectedCategory) return false;
       const text = `${s.name || ""} ${s.description || s.descripcion || ""}`
