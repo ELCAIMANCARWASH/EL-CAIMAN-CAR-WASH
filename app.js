@@ -904,6 +904,23 @@ function renderReservasAdmin(reservas) {
               ${v.actual_end ? `<div><strong>Finalizado:</strong> ${escaparHTML(v.actual_end)}</div>` : ""}
               <div><strong>Lavador asignado:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
               ${serviceDone ? '<div style="color:#17633d;font-weight:700">✓ Lavado terminado</div>' : `
+              <div style="border:1px solid #b9d7c5;background:#f5fbf7;border-radius:7px;padding:9px;display:grid;gap:7px;margin:5px 0">
+                <strong>Reprogramar fecha y hora</strong>
+                <label style="display:grid;gap:4px">Nueva fecha
+                  <input type="date" data-reschedule-date="${escaparHTML(v.vehicle_id || "")}" value="${escaparHTML(r.appointment_date || "")}" min="${new Date().toLocaleDateString("en-CA", {timeZone:"America/Panama"})}" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
+                </label>
+                <label style="display:grid;gap:4px">Nueva hora de inicio
+                  <input type="time" data-reschedule-time="${escaparHTML(v.vehicle_id || "")}" value="${escaparHTML(String(v.scheduled_start || r.requested_start_time || "").split(" ").pop().slice(0,5))}" step="1800" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
+                </label>
+                <label style="display:grid;gap:4px">Lavador para la nueva cita
+                  <select data-reschedule-washer="${escaparHTML(v.vehicle_id || "")}" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
+                    <option value="">Selecciona un lavador activo</option>
+                    ${ccwWashersAdminCache.filter(w => w.status === "activo").map(w => `<option value="${escaparHTML(w.id)}" ${w.id === v.washer_id ? "selected" : ""}>${escaparHTML(w.full_name)}</option>`).join("")}
+                  </select>
+                </label>
+                <button type="button" data-reschedule="${escaparHTML(v.vehicle_id || "")}" style="padding:9px;background:#245b3e;color:white;border:0;border-radius:6px;font-weight:700">Guardar nueva fecha y hora</button>
+                <p data-reschedule-message="${escaparHTML(v.vehicle_id || "")}" role="status" style="margin:0;font-size:12px"></p>
+              </div>
               <label style="display:grid;gap:5px;font-weight:700">Cambiar lavador
                 <select data-assign-washer="${escaparHTML(v.vehicle_id || "")}" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #b9c9bf;border-radius:6px">
                   <option value="">Selecciona un lavador activo</option>
@@ -944,6 +961,35 @@ function renderReservasAdmin(reservas) {
         await actualizarReservasAdmin();
       } catch (error) {
         if (msg) msg.textContent = error.message || "No se pudo confirmar el pago.";
+        button.disabled = false;
+      }
+    };
+  });
+  container.querySelectorAll("[data-reschedule]").forEach(button => {
+    button.onclick = async () => {
+      const vehicleId = button.dataset.reschedule;
+      const dateInput = container.querySelector(`[data-reschedule-date="${vehicleId}"]`);
+      const timeInput = container.querySelector(`[data-reschedule-time="${vehicleId}"]`);
+      const washerInput = container.querySelector(`[data-reschedule-washer="${vehicleId}"]`);
+      const msg = container.querySelector(`[data-reschedule-message="${vehicleId}"]`);
+      if (!vehicleId || !dateInput?.value || !timeInput?.value || !washerInput?.value) { if (msg) msg.textContent = "Selecciona la nueva fecha, hora y lavador."; return; }
+      if (!confirm("¿Confirmas reprogramar la cita completa? Se validará la jornada publicada y los conflictos del nuevo horario y lavador. Se notificará al cliente mediante Supabase. El precio y el pago no se modificarán.")) return;
+      button.disabled = true;
+      if (msg) msg.textContent = "Validando cupo real y guardando…";
+      try {
+        const token = sessionStorage.getItem("ccw_access_token");
+        if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reprogramar_reserva", vehicle_id: vehicleId, appointment_date: dateInput.value, requested_start_time: timeInput.value, washer_id: washerInput.value })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo reprogramar el servicio.");
+        if (msg) msg.textContent = data.message || "Fecha y hora actualizadas.";
+        await actualizarReservasAdmin();
+      } catch (error) {
+        if (msg) msg.textContent = error.message || "No se pudo reprogramar el servicio.";
         button.disabled = false;
       }
     };
