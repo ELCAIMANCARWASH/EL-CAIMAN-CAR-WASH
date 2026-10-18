@@ -253,25 +253,6 @@ async function mostrarCliente() {
         <h2 style="margin:0">Reserva tu lavado</h2>
         <p style="margin:0;color:#52655a">Selecciona una tarifa confirmada y solicita el horario. La cita solo queda confirmada si el sistema encuentra disponibilidad.</p>
         <form id="ccw-booking-form" style="display:grid;gap:12px">
-          <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          
-<label>Correo electrónico (obligatorio)
-  <input
-    id="ccw-customer-email"
-    name="customer_email"
-    type="email"
-    required
-    maxlength="254"
-    autocomplete="email"
-    style="display:block;width:100%;padding:12px;margin-top:5px"
-  >
-</label>
-          <label>Número de casa y dirección exacta (obligatorio)
-            <input id="ccw-customer-address" name="customer_address" required minlength="2" maxlength="250" autocomplete="street-address"
-              style="display:block;width:100%;padding:12px;margin-top:5px"
-              placeholder="Ej.: Casa 12, calle principal, portón negro, junto a…">
-          </label>
           <section aria-labelledby="ccw-catalog-title" style="display:grid;gap:10px">
             <h3 id="ccw-catalog-title" style="margin:4px 0">Catálogo de servicios</h3>
             <label>1. Categoría del servicio
@@ -316,9 +297,31 @@ async function mostrarCliente() {
             </label>
           </div>
           <label>Fecha solicitada<input id="ccw-booking-date" type="date" required style="display:block;width:100%;padding:12px;margin-top:5px"></label>
-          <label>Hora solicitada<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona una fecha primero</option></select></label>
+          <label>Hora disponible<select id="ccw-booking-time" required style="display:block;width:100%;padding:12px;margin-top:5px"><option value="">Selecciona primero servicio y fecha</option></select></label>
+          <p id="ccw-availability-message" class="notice" role="status" aria-live="polite">Selecciona un servicio y una fecha para consultar los cupos reales.</p>
           <label>Notas (opcional)<textarea id="ccw-booking-notes" maxlength="500" rows="3" style="display:block;width:100%;padding:12px;margin-top:5px"></textarea></label>
-          <p class="notice">Horario de atención: 8:00 a. m. a 10:00 p. m. El descanso del personal es de 1:00 p. m. a 2:00 p. m. Las citas dependen de la duración del servicio y de la disponibilidad real del personal.</p>  
+          <p class="notice">Los horarios se calculan según la jornada publicada, los lavadores disponibles, la duración del servicio y las reservas existentes. La disponibilidad puede cambiar hasta que se confirme la reserva.</p>
+          <fieldset id="ccw-customer-details" hidden disabled style="display:none;border:1px solid #d7e1da;border-radius:10px;padding:14px;gap:12px">
+            <legend style="font-weight:700;padding:0 6px">Tus datos para confirmar la reserva</legend>
+          <label>Nombre completo<input id="ccw-customer-name" name="customer_name" required minlength="2" maxlength="120" autocomplete="name" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          <label>Teléfono<input id="ccw-customer-phone" name="customer_phone" required minlength="7" maxlength="30" autocomplete="tel" style="display:block;width:100%;padding:12px;margin-top:5px"></label>
+          
+<label>Correo electrónico (obligatorio)
+  <input
+    id="ccw-customer-email"
+    name="customer_email"
+    type="email"
+    required
+    maxlength="254"
+    autocomplete="email"
+    style="display:block;width:100%;padding:12px;margin-top:5px"
+  >
+</label>
+          <label>Número de casa y dirección exacta (obligatorio)
+            <input id="ccw-customer-address" name="customer_address" required minlength="2" maxlength="250" autocomplete="street-address"
+              style="display:block;width:100%;padding:12px;margin-top:5px"
+              placeholder="Ej.: Casa 12, calle principal, portón negro, junto a…">
+          </label>
 <label for="ccw-payment-method" style="display:block;font-weight:600">
   Método de pago (obligatorio)
   <select
@@ -333,6 +336,9 @@ async function mostrarCliente() {
     <option value="efectivo">Efectivo</option>
   </select>
 </label>
+          </fieldset>
+
+
           <button id="ccw-submit-booking" class="button" type="submit" style="margin-top:0">Solicitar cita</button>
           <p id="ccw-booking-message" role="status" aria-live="polite"></p>
         </form>
@@ -348,8 +354,12 @@ async function mostrarCliente() {
   const priceLabel = document.getElementById("ccw-booking-price");
   const dateInput = document.getElementById("ccw-booking-date");
   const timeSelect = document.getElementById("ccw-booking-time");
+  const availabilityMessage = document.getElementById("ccw-availability-message");
+  const customerDetails = document.getElementById("ccw-customer-details");
   const message = document.getElementById("ccw-booking-message");
   const submit = document.getElementById("ccw-submit-booking");
+  let availabilityRequestId = 0;
+  submit.disabled = true;
   const success = document.getElementById("ccw-booking-success");
   const validVehicleTypes = new Set(["sedan", "suv", "4x4", "busito", "pickup"]);
   const vehicleTypeSelect = document.getElementById("ccw-car-type");
@@ -422,6 +432,7 @@ if (cat === "vehiculos") return "autos";
   }
 
   function actualizarServiciosPorCategoria() {
+    availabilityRequestId++;
     selectedCategory = categorySelect.value;
     selectedService = null;
     limpiarSelect(serviceSelect, selectedCategory ? "Selecciona un servicio" : "Selecciona primero la categoría");
@@ -430,6 +441,11 @@ if (cat === "vehiculos") return "autos";
     tariffSelect.disabled = true;
     priceLabel.textContent = "";
     actualizarVisibilidadVehiculo();
+    timeSelect.innerHTML = "";
+    timeSelect.add(new Option("Selecciona servicio y fecha", ""));
+    timeSelect.disabled = true;
+    mostrarDatosCliente(false);
+    if (availabilityMessage) availabilityMessage.textContent = "Selecciona una tarifa y una fecha para consultar los cupos reales.";
 
     if (!selectedCategory) {
       serviceHelp.textContent = "Elige una categoría para ver sus opciones.";
@@ -483,10 +499,16 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
   }
 
   function actualizarTarifasServicio() {
+    availabilityRequestId++;
     selectedService = catalogServices.find(s => String(s.id) === serviceSelect.value) || null;
     limpiarSelect(tariffSelect, selectedService ? "Selecciona tamaño o tarifa" : "Selecciona un servicio primero");
     tariffSelect.disabled = !selectedService;
     priceLabel.textContent = "";
+    timeSelect.innerHTML = "";
+    timeSelect.add(new Option("Selecciona una tarifa y fecha", ""));
+    timeSelect.disabled = true;
+    mostrarDatosCliente(false);
+    if (availabilityMessage) availabilityMessage.textContent = "Selecciona una tarifa y una fecha para consultar los cupos reales.";
     if (!selectedService) return;
 
     const vehicleCategory = esCategoriaDeVehiculo(selectedCategory);
@@ -554,33 +576,83 @@ console.log("SERVICIOS MOSTRADOS:", selectedCategory, matchingServices.map(s => 
     serviceHelp.textContent = "Selecciona la tarifa confirmada para continuar.";
   }
 
-  function actualizarHoras() {
+  function mostrarDatosCliente(visible) {
+    customerDetails.hidden = !visible;
+    customerDetails.style.display = visible ? "grid" : "none";
+    customerDetails.disabled = !visible;
+    submit.disabled = !visible;
+  }
+
+  async function actualizarHoras() {
+    const requestId = ++availabilityRequestId;
     const date = dateInput.value;
+    const selectedTariff = tariffSelect.value === "" ? null : allTariffs[Number(tariffSelect.value)];
     timeSelect.innerHTML = "";
-    if (!date) {
-      timeSelect.add(new Option("Selecciona una fecha primero", ""));
+    timeSelect.add(new Option("Consultando disponibilidad…", ""));
+    timeSelect.disabled = true;
+    mostrarDatosCliente(false);
+    if (!date || !selectedTariff) {
+      timeSelect.innerHTML = "";
+      timeSelect.add(new Option("Selecciona servicio y fecha", ""));
+      if (availabilityMessage) availabilityMessage.textContent = "Selecciona una tarifa y una fecha para consultar los cupos reales.";
       return;
     }
-    // Horas solicitables cada 30 minutos. La función SQL valida disponibilidad
-    // real y puede rechazar un horario ocupado o sin plan publicado.
-    timeSelect.add(new Option("Selecciona una hora", ""));
-    for (let minutes = 8 * 60; minutes <= 20 * 60 + 30; minutes += 30) {
-      const h = String(Math.floor(minutes / 60)).padStart(2, "0");
-      const m = String(minutes % 60).padStart(2, "0");
-      const value = `${h}:${m}`;
-      if (date === panamaToday) {
-        const nowParts = new Intl.DateTimeFormat("en-GB", {
-          timeZone: "America/Panama", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-        }).format(new Date()).split(":").map(Number);
-        if (minutes <= nowParts[0] * 60 + nowParts[1]) continue;
+    if (!selectedTariff.isVehicle) {
+      timeSelect.innerHTML = "";
+      timeSelect.add(new Option("Servicio no reservable en línea", ""));
+      if (availabilityMessage) availabilityMessage.textContent = "Este servicio todavía requiere confirmación de la Administradora y no tiene reserva en línea.";
+      return;
+    }
+    if (date < panamaToday) {
+      timeSelect.innerHTML = "";
+      timeSelect.add(new Option("Selecciona una fecha válida", ""));
+      if (availabilityMessage) availabilityMessage.textContent = "No puedes reservar una fecha pasada.";
+      return;
+    }
+    if (availabilityMessage) availabilityMessage.textContent = "Consultando jornada publicada, lavadores disponibles y reservas existentes…";
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "disponibilidad",
+          appointment_date: date,
+          service_id: selectedTariff.serviceId,
+          vehicle_type: selectedTariff.vehicleType
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (requestId !== availabilityRequestId) return;
+      if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo consultar la disponibilidad real.");
+      timeSelect.innerHTML = "";
+      timeSelect.add(new Option("Selecciona un horario disponible", ""));
+      const slots = Array.isArray(data.slots) ? data.slots : [];
+      slots.forEach(slot => {
+        const label = slot.capacity > 1 ? `${slot.time} · ${slot.capacity} cupos` : `${slot.time} · ${slot.capacity} cupo`;
+        timeSelect.add(new Option(label, slot.time));
+      });
+      timeSelect.disabled = slots.length === 0;
+      if (availabilityMessage) {
+        availabilityMessage.textContent = slots.length
+          ? `Disponibilidad consultada para ${date}. Se muestran solo horas con capacidad real para este servicio (${data.duration_minutes || 90} minutos). La reserva se vuelve a validar al enviarla.`
+          : (data.message || "No hay cupos disponibles para este servicio en esa fecha. Prueba otra fecha.");
       }
-      if (minutes >= 13 * 60 && minutes < 14 * 60) continue;
-      timeSelect.add(new Option(value, value));
+    } catch (error) {
+      if (requestId !== availabilityRequestId) return;
+      timeSelect.innerHTML = "";
+      timeSelect.add(new Option("Disponibilidad no disponible", ""));
+      timeSelect.disabled = true;
+      if (availabilityMessage) availabilityMessage.textContent = error.message || "No se pudo consultar la disponibilidad.";
     }
   }
 
+  timeSelect.addEventListener("change", () => {
+    const validSelection = Boolean(timeSelect.value) && !timeSelect.disabled;
+    mostrarDatosCliente(validSelection);
+    if (availabilityMessage && validSelection) availabilityMessage.textContent += " Completa tus datos para continuar.";
+  });
   dateInput.addEventListener("change", actualizarHoras);
-  tariffSelect.addEventListener("change", actualizarPrecio);
+  tariffSelect.addEventListener("change", () => { actualizarPrecio(); actualizarHoras(); });
   categorySelect.addEventListener("change", actualizarServiciosPorCategoria);
   serviceSelect.addEventListener("change", actualizarTarifasServicio);
   vehicleTypeSelect.addEventListener("change", () => {
