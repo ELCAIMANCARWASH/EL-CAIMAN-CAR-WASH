@@ -1127,51 +1127,94 @@ async function actualizarComisionesAdmin() {
   try {
     const rows = await cargarComisionesAdmin();
     const money = n => formatoPrecio(Number(n) || 0);
-    const sum = status => rows
-  .filter(c => c.status === status)
-  .reduce((s, c) =>
-    s +
-    Number(c.commission_amount || 0) +
-    Number(c.commission_home_amount || 0),
-    0
-  );
-    if (summary) summary.innerHTML = `<div><strong>Pendiente del pago del cliente:</strong> ${money(sum("pendiente_pago_cliente"))}</div><div><strong>A pagar:</strong> ${money(sum("a_pagar"))}</div><div><strong>Pagado históricamente:</strong> ${money(sum("pagada"))}</div>`;
-    if (list) list.innerHTML = rows.map(c => {
-  const comisionNormal = Number(c.commission_amount || 0);
-  const comisionDomicilio = Number(c.commission_home_amount || 0);
-  const totalComision = comisionNormal + comisionDomicilio;
+    const totalComision = c => Number(c.commission_amount || 0) + Number(c.commission_home_amount || 0);
+    const estado = status => ({
+      pendiente_revision: "Pendiente de revisión",
+      pendiente_pago_cliente: "Pendiente del pago del cliente",
+      a_pagar: "Disponible para pagar",
+      pagada: "Pagada"
+    })[status] || escaparHTML(status || "Sin estado");
+    const sum = status => rows.filter(c => c.status === status).reduce((s, c) => s + totalComision(c), 0);
 
-  return `<article style="border:1px solid #d8e2dc;border-radius:8px;padding:10px;display:grid;gap:5px">
-    <strong>${escaparHTML(c.washer_name)} · Total: ${money(totalComision)}</strong>
-    <div>Servicio: ${escaparHTML(c.service_name)}</div>
-    <div>Base: ${money(c.service_price)} · Comisión: ${Number(c.commission_rate)}%</div>
-    <div>Comisión normal: ${money(comisionNormal)}</div>
-    <div>Comisión por domicilio: ${money(comisionDomicilio)}</div>
-    <div>Estado: <strong>${({pendiente_revision:"Pendiente de revisión",pendiente_pago_cliente:"Pendiente del pago del cliente",a_pagar:"A pagar",pagada:"Pagada"})[c.status] || escaparHTML(c.status)}</strong></div>
-    ${c.paid_at ? `<div>Pagada: ${escaparHTML(new Date(c.paid_at).toLocaleString("es-PA",{timeZone:"America/Panama"}))}</div>` : ""}
-    ${c.status === "a_pagar" ? `<label>Nota del pago (opcional)<input data-commission-note="${escaparHTML(c.id)}" maxlength="1000" style="display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px"></label><button type="button" data-pay-commission="${escaparHTML(c.id)}" style="padding:10px;background:#18764e;color:white;border:0;border-radius:7px;font-weight:bold">Registrar pago al lavador</button><p data-commission-msg="${escaparHTML(c.id)}" role="status" style="margin:0"></p>` : c.status === "pagada" && c.payment_notes ? `<div>Nota: ${escaparHTML(c.payment_notes)}</div>` : ""}
-  </article>`;
-}).join("") || '<p>No hay comisiones registradas todavía.</p>';
-    list?.querySelectorAll("[data-pay-commission]").forEach(btn => btn.onclick = async () => {
-      const id = btn.dataset.payCommission;
-      const output = list.querySelector(`[data-commission-msg="${id}"]`);
-      const note = list.querySelector(`[data-commission-note="${id}"]`)?.value || "";
-      if (!confirm("¿Confirmas que ya pagaste esta comisión al lavador? Esta acción quedará registrada en el historial.")) return;
-      btn.disabled = true;
-      try {
-        const token = sessionStorage.getItem("ccw_access_token");
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, { method:"POST", headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${token}`,"Content-Type":"application/json"}, body:JSON.stringify({action:"pagar_comision",commission_id:id,payment_notes:note}) });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo registrar el pago.");
-        if (output) output.textContent = "Pago registrado.";
-        await actualizarComisionesAdmin();
-      } catch (e) { if (output) output.textContent = e.message || "Error al registrar el pago."; btn.disabled = false; }
+    if (summary) summary.innerHTML = `
+      <div style="background:#fff8e8;border:1px solid #f0dfb2;border-radius:8px;padding:10px"><strong>Pendiente del pago del cliente:</strong> ${money(sum("pendiente_pago_cliente"))}</div>
+      <div style="background:#edf5ef;border:1px solid #cfe2d5;border-radius:8px;padding:10px"><strong>Disponible para pagar:</strong> ${money(sum("a_pagar"))}</div>
+      <div style="background:#f4f7f5;border:1px solid #d8e2dc;border-radius:8px;padding:10px"><strong>Pagado históricamente:</strong> ${money(sum("pagada"))}</div>`;
+
+    // Agrupación visual por lavador: no modifica datos ni estados en Supabase.
+    const groups = new Map();
+    rows.forEach(c => {
+      const key = String(c.washer_id || c.washer_name || "sin-lavador");
+      if (!groups.has(key)) groups.set(key, { name: c.washer_name || "Lavador sin nombre", rows: [] });
+      groups.get(key).rows.push(c);
     });
-    if (msg) msg.textContent = `Comisiones consultadas: ${rows.length}.`;
-  } catch (e) { if (msg) msg.textContent = e.message || "No se pudieron consultar las comisiones."; }
-  finally { if (button) button.disabled = false; }
-}
+    const washers = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
 
+    if (list) {
+      list.innerHTML = washers.map((w, index) => {
+        const pendingClient = w.rows.filter(c => c.status === "pendiente_pago_cliente").reduce((s, c) => s + totalComision(c), 0);
+        const available = w.rows.filter(c => c.status === "a_pagar").reduce((s, c) => s + totalComision(c), 0);
+        const paid = w.rows.filter(c => c.status === "pagada").reduce((s, c) => s + totalComision(c), 0);
+        const availableCount = w.rows.filter(c => c.status === "a_pagar").length;
+        const details = [...w.rows].sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0)).map(c => {
+          const normal = Number(c.commission_amount || 0);
+          const home = Number(c.commission_home_amount || 0);
+          const total = normal + home;
+          const date = c.created_at ? escaparHTML(new Date(c.created_at).toLocaleString("es-PA", { timeZone: "America/Panama" })) : "Fecha no disponible";
+          return `<article style="border:1px solid #d8e2dc;border-radius:8px;padding:12px;display:grid;gap:6px;min-width:0">
+            <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>${escaparHTML(c.service_name || "Servicio")}</strong><strong>${money(total)}</strong></div>
+            <div style="font-size:13px;color:#52655a">Fecha: ${date}</div>
+            <div>Base del servicio: ${money(c.service_price)} · Comisión: ${Number(c.commission_rate) || 0}%</div>
+            <div>Comisión normal: ${money(normal)}</div><div>Comisión por domicilio: ${money(home)}</div>
+            <div>Estado: <strong>${estado(c.status)}</strong></div>
+            ${c.paid_at ? `<div>Pago registrado: ${escaparHTML(new Date(c.paid_at).toLocaleString("es-PA", { timeZone: "America/Panama" }))}</div>` : ""}
+            ${c.status === "a_pagar" ? `<label style="display:grid;gap:4px">Nota del pago (opcional)<input data-commission-note="${escaparHTML(c.id)}" maxlength="1000" style="display:block;width:100%;box-sizing:border-box;padding:10px;border:1px solid #b9c9bf;border-radius:7px"></label>
+              <button type="button" data-pay-commission="${escaparHTML(c.id)}" style="padding:12px;background:#18764e;color:white;border:0;border-radius:7px;font-weight:bold;cursor:pointer">Pagar esta comisión</button><p data-commission-msg="${escaparHTML(c.id)}" role="status" style="margin:0"></p>` : c.status === "pagada" && c.payment_notes ? `<div>Nota del pago: ${escaparHTML(c.payment_notes)}</div>` : ""}
+          </article>`;
+        }).join("");
+        return `<section data-washer-commission-group="${index}" style="border:1px solid #b9cfc0;border-radius:12px;padding:14px;display:grid;gap:12px;min-width:0;background:#fff">
+          <header style="display:grid;gap:8px"><h4 style="font-size:18px;margin:0;overflow-wrap:anywhere">${escaparHTML(w.name)}</h4>
+          <div style="font-size:13px;color:#52655a">${w.rows.length} trabajo(s) registrado(s) · ${availableCount} comisión(es) disponible(s) para pagar</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px">
+            <div style="background:#fff8e8;border-radius:8px;padding:10px"><div style="font-size:12px">Pendiente del cliente</div><strong>${money(pendingClient)}</strong></div>
+            <div style="background:#edf5ef;border-radius:8px;padding:10px"><div style="font-size:12px">Disponible para pagar</div><strong>${money(available)}</strong></div>
+            <div style="background:#f4f7f5;border-radius:8px;padding:10px"><div style="font-size:12px">Ya pagado al lavador</div><strong>${money(paid)}</strong></div>
+          </div></header><details><summary style="cursor:pointer;font-weight:700;padding:8px 0">Ver detalle de trabajos y pagos</summary><div style="display:grid;gap:8px;padding-top:8px">${details}</div></details>
+        </section>`;
+      }).join("") || '<p>No hay comisiones registradas todavía.</p>';
+
+      // Solo se muestra el botón para filas cuyo estado actual es "a_pagar".
+      list.querySelectorAll("[data-pay-commission]").forEach(btn => btn.onclick = async () => {
+        const id = btn.dataset.payCommission;
+        const output = list.querySelector(`[data-commission-msg="${id}"]`);
+        const note = list.querySelector(`[data-commission-note="${id}"]`)?.value || "";
+        if (!confirm("¿Confirmas que ya pagaste esta comisión al lavador? Esta acción quedará registrada en el historial.")) return;
+        btn.disabled = true;
+        try {
+          const token = sessionStorage.getItem("ccw_access_token");
+          if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/gestionar-reservas`, {
+            method: "POST",
+            headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "pagar_comision", commission_id: id, payment_notes: note })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data.ok !== true) throw new Error(data.error || "No se pudo registrar el pago.");
+          if (output) output.textContent = "Pago registrado.";
+          await actualizarComisionesAdmin();
+        } catch (error) {
+          if (output) output.textContent = error.message || "Error al registrar el pago.";
+          btn.disabled = false;
+        }
+      });
+    }
+    if (msg) msg.textContent = `Comisiones consultadas: ${rows.length} en ${washers.length} lavador(es).`;
+  } catch (error) {
+    if (msg) msg.textContent = error.message || "No se pudieron consultar las comisiones.";
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
 async function activarNotificacionesAdmin() {
   const output = document.getElementById("ccw-push-message");
   const button = document.getElementById("ccw-push-enable");
