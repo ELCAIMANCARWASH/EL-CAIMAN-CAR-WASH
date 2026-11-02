@@ -402,6 +402,26 @@ function mostrarTarifasServicio(servicio) {
 
 async function mostrarCliente() {
   estiloBase();
+  // Diseño visual exclusivo de la pantalla de reserva del cliente.
+  // No modifica el flujo del formulario ni las llamadas a Supabase.
+  document.body.style.cssText = `margin:0;min-height:100vh;color:#183126;font-family:Arial,sans-serif;background:linear-gradient(135deg,rgba(4,18,14,.62),rgba(4,18,14,.48)),url('./fondo-reserva-carwash.jpg') center center / cover fixed no-repeat;background-attachment:fixed`;
+  if (!document.getElementById("ccw-client-booking-visual")) {
+    const visual = document.createElement("style");
+    visual.id = "ccw-client-booking-visual";
+    visual.textContent = `
+      body:has(#ccw-booking-form) > header { background:rgba(7,25,19,.76)!important; backdrop-filter:blur(5px); }
+      body:has(#ccw-booking-form) > main { width:min(94%,900px); box-sizing:border-box; margin:24px auto!important; padding:16px!important; }
+      body:has(#ccw-booking-form) > main > section { background:rgba(255,255,255,.97)!important; border:1px solid rgba(255,255,255,.75)!important; border-radius:18px!important; box-shadow:0 18px 55px rgba(0,0,0,.30); }
+      body:has(#ccw-booking-form) #ccw-booking-form input,
+      body:has(#ccw-booking-form) #ccw-booking-form select,
+      body:has(#ccw-booking-form) #ccw-booking-form textarea { box-sizing:border-box; border:1px solid #cbd9d0; border-radius:9px; background:#fff; color:#183126; }
+      body:has(#ccw-booking-form) #ccw-booking-form input:focus,
+      body:has(#ccw-booking-form) #ccw-booking-form select:focus,
+      body:has(#ccw-booking-form) #ccw-booking-form textarea:focus { outline:3px solid rgba(215,181,109,.42); border-color:#18764e; }
+      @media(max-width:600px){body:has(#ccw-booking-form) > main{width:100%;margin:12px auto!important;padding:10px!important}body:has(#ccw-booking-form) > main > section{padding:16px!important;border-radius:14px!important}}
+    `;
+    document.head.appendChild(visual);
+  }
   document.body.innerHTML = `
     ${cabecera("Agendar una cita")}
     <main style="max-width:760px;margin:24px auto;padding:16px;display:grid;gap:14px">
