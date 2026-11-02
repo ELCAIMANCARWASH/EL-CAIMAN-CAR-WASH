@@ -301,15 +301,50 @@ function boton(text, id) {
 
 function mostrarInicio(mensaje = "") {
   estiloFondoLogin();
+
+  if (!document.getElementById("ccw-home-screen-styles")) {
+    const homeStyles = document.createElement("style");
+    homeStyles.id = "ccw-home-screen-styles";
+    homeStyles.textContent = `
+      .ccw-auth-panel.ccw-home-panel {
+        width: min(92%, 620px); margin: 24px auto !important;
+        padding: clamp(22px, 4vw, 38px) !important; display: grid; gap: 16px;
+        text-align: center; background: rgba(255,255,255,.98);
+        border-radius: 22px; box-shadow: 0 22px 65px rgba(0,0,0,.38);
+      }
+      .ccw-home-logo { display:block; width:min(72%,250px); max-height:185px;
+        object-fit:contain; margin:0 auto 2px; border-radius:12px; }
+      .ccw-home-panel h2 { margin:0; color:#142d23; font-size:clamp(25px,3vw,32px); line-height:1.2; }
+      .ccw-home-panel .ccw-home-intro { margin:2px 0 8px; color:#465c52; font-size:18px; line-height:1.5; }
+      .ccw-home-panel button { display:block; width:100%; min-height:58px; padding:15px 18px !important;
+        border-radius:13px !important; background:#18764e !important; color:#fff !important;
+        font-size:17px !important; font-weight:700; box-shadow:0 5px 12px rgba(16,75,48,.14); }
+      .ccw-home-panel button:hover { background:#12633f !important; }
+      .ccw-home-message:empty { display:none; }
+      @media(max-width:600px) {
+        .ccw-auth-panel.ccw-home-panel { width:calc(100% - 28px); margin:18px auto !important; padding:22px 18px !important; gap:13px; }
+        .ccw-home-logo { width:min(68%,205px); max-height:150px; }
+        .ccw-home-panel button { min-height:54px; font-size:16px !important; }
+        .ccw-home-panel .ccw-home-intro { font-size:16px; }
+      }
+    `;
+    document.head.appendChild(homeStyles);
+  }
+
+  document.body.style.minHeight = "100vh";
+  document.body.style.display = "flex";
+  document.body.style.alignItems = "center";
+  document.body.style.justifyContent = "center";
+  document.body.style.padding = "18px 0";
   document.body.innerHTML = `
-    ${cabecera("Lavado profesional · Reservas y atención")}
-    <main class="ccw-auth-panel" style="max-width:520px;margin:32px auto;padding:20px;display:grid;gap:16px">
-      <h2 style="text-align:center">Bienvenido</h2>
-      <p style="text-align:center">Selecciona cómo deseas ingresar.</p>
+    <main class="ccw-auth-panel ccw-home-panel">
+      <img class="ccw-home-logo" src="./logo.png?v=2" alt="Logo de EL CAIMAN CAR WASH" width="1200" height="800">
+      <h2>Bienvenido</h2>
+      <p class="ccw-home-intro">Selecciona cómo deseas ingresar.</p>
       ${boton("Soy cliente · Reservar lavado", "ccw-cliente")}
       ${boton("Administración", "ccw-admin")}
       ${boton("Acceso del lavador", "ccw-lavador")}
-      <p id="ccw-home-message" role="status">${escaparHTML(mensaje)}</p>
+      <p id="ccw-home-message" class="ccw-home-message" role="status">${escaparHTML(mensaje)}</p>
     </main>`;
 
   document.getElementById("ccw-cliente").onclick = () => mostrarCliente();
