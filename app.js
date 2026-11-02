@@ -211,6 +211,53 @@ function estiloBase() {
     "margin:0;background:#f4f7f5;color:#183126;font-family:Arial,sans-serif";
 }
 
+
+function estiloFondoLogin() {
+  estiloBase();
+  document.body.style.minHeight = "100vh";
+  document.body.style.background =
+    "linear-gradient(135deg, rgba(5, 20, 15, .72), rgba(5, 20, 15, .58)), url('./fondo-login-carwash.jpg') center / cover fixed no-repeat";
+  document.body.style.backgroundAttachment = "fixed";
+
+  if (!document.getElementById("ccw-login-background-styles")) {
+    const style = document.createElement("style");
+    style.id = "ccw-login-background-styles";
+    style.textContent = `
+      .ccw-auth-panel {
+        width: min(92%, 460px);
+        margin: 34px auto !important;
+        padding: clamp(20px, 4vw, 30px) !important;
+        background: rgba(255, 255, 255, .96);
+        border: 1px solid rgba(255, 255, 255, .65);
+        border-radius: 18px;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, .30);
+        backdrop-filter: blur(8px);
+      }
+      .ccw-auth-panel input {
+        width: 100%;
+        min-height: 46px;
+        border: 1px solid #cbd9d0;
+        border-radius: 9px;
+        background: #fff;
+        color: #183126;
+        font: inherit;
+      }
+      .ccw-auth-panel input:focus {
+        outline: 3px solid rgba(215, 181, 109, .55);
+        border-color: #18764e;
+      }
+      .ccw-auth-panel button {
+        min-height: 46px;
+        font-weight: 700;
+      }
+      @media (max-width: 480px) {
+        .ccw-auth-panel { margin: 22px auto !important; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 function cabecera(subtitulo) {
   return `
     <header style="
@@ -253,10 +300,10 @@ function boton(text, id) {
 }
 
 function mostrarInicio(mensaje = "") {
-  estiloBase();
+  estiloFondoLogin();
   document.body.innerHTML = `
     ${cabecera("Lavado profesional · Reservas y atención")}
-    <main style="max-width:520px;margin:32px auto;padding:20px;display:grid;gap:16px">
+    <main class="ccw-auth-panel" style="max-width:520px;margin:32px auto;padding:20px;display:grid;gap:16px">
       <h2 style="text-align:center">Bienvenido</h2>
       <p style="text-align:center">Selecciona cómo deseas ingresar.</p>
       ${boton("Soy cliente · Reservar lavado", "ccw-cliente")}
@@ -862,10 +909,10 @@ if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
 }
 
 function mostrarLoginAdmin() {
-  estiloBase();
+  estiloFondoLogin();
   document.body.innerHTML = `
     ${cabecera("Acceso administrativo")}
-    <main style="max-width:420px;margin:35px auto;padding:22px">
+    <main class="ccw-auth-panel" style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-login" style="display:grid;gap:14px">
         <label for="ccw-email">Correo de administración</label>
         <input id="ccw-email" type="email" autocomplete="username" required style="padding:12px">
@@ -1706,11 +1753,11 @@ function borrarSesionLavador() {
 }
 
 function mostrarLoginLavador(message = "") {
-  estiloBase();
+  estiloFondoLogin();
   borrarSesionLavador();
   document.body.innerHTML = `
     ${cabecera("Acceso del lavador")}
-    <main style="max-width:420px;margin:35px auto;padding:22px">
+    <main class="ccw-auth-panel" style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-pin-form" style="display:grid;gap:14px">
         <p>Introduce únicamente el PIN diario que te entregó la administración.</p>
         <label for="ccw-pin">PIN de 4 dígitos</label>
