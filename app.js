@@ -1739,6 +1739,9 @@ async function importarClientesDesdeReservasAdmin() {
   }
 }
 
+let ccwCustomerDirectoryPage = 1;
+const CCW_CUSTOMERS_PER_PAGE = 5;
+
 async function buscarClientesDirectorioAdmin() {
   const box = document.getElementById("ccw-customer-results");
   if (!box) return;
@@ -1764,7 +1767,11 @@ async function buscarClientesDirectorioAdmin() {
       rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
     }
     const list = Array.isArray(rows) ? rows : [];
-    box.innerHTML = list.length ? list.map(c => {
+    const totalPages = Math.max(1, Math.ceil(list.length / CCW_CUSTOMERS_PER_PAGE));
+    ccwCustomerDirectoryPage = Math.min(Math.max(1, ccwCustomerDirectoryPage), totalPages);
+    const pageStart = (ccwCustomerDirectoryPage - 1) * CCW_CUSTOMERS_PER_PAGE;
+    const visibleCustomers = list.slice(pageStart, pageStart + CCW_CUSTOMERS_PER_PAGE);
+    box.innerHTML = list.length ? visibleCustomers.map(c => {
       const vehicles = Array.isArray(c.customer_vehicles) ? c.customer_vehicles : [];
       const vehicleText = vehicles.map(v => [v.license_plate, v.vehicle_type].filter(Boolean).join(" · ")).join(" / ");
       return `<article style="background:white;border:1px solid #d7e1da;border-radius:10px;padding:12px;display:grid;gap:5px">
@@ -1786,6 +1793,21 @@ async function buscarClientesDirectorioAdmin() {
         <button type="button" data-edit-customer="${escaparHTML(c.id)}" style="padding:9px">Editar ficha</button>
       </article>`;
     }).join("") : "<p>No se encontraron clientes registrados.</p>";
+    if (list.length > CCW_CUSTOMERS_PER_PAGE) {
+      box.insertAdjacentHTML("beforeend", `
+        <nav aria-label="Paginación de agenda de clientes" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f2f7f3;border:1px solid #d5e3d9;border-radius:12px;padding:12px;margin-top:4px">
+          <span style="font-size:13px;color:#52655a">Mostrando ${pageStart + 1}–${Math.min(pageStart + CCW_CUSTOMERS_PER_PAGE, list.length)} de ${list.length} clientes</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button type="button" data-customer-page="prev" ${ccwCustomerDirectoryPage === 1 ? "disabled" : ""} style="padding:9px 12px;border:1px solid #b9cfc0;border-radius:8px;background:white;color:#174b35;font-weight:700;cursor:pointer">‹ Anterior</button>
+            <strong style="font-size:13px;white-space:nowrap">${ccwCustomerDirectoryPage} / ${totalPages}</strong>
+            <button type="button" data-customer-page="next" ${ccwCustomerDirectoryPage === totalPages ? "disabled" : ""} style="padding:9px 12px;border:1px solid #b9cfc0;border-radius:8px;background:white;color:#174b35;font-weight:700;cursor:pointer">Siguiente ›</button>
+          </div>
+        </nav>`);
+      box.querySelectorAll("[data-customer-page]").forEach(button => button.addEventListener("click", () => {
+        ccwCustomerDirectoryPage += button.dataset.customerPage === "next" ? 1 : -1;
+        buscarClientesDirectorioAdmin();
+      }));
+    }
     box.querySelectorAll("[data-create-booking]").forEach(slider => {
       let startX = null;
       const hint = slider.closest(".ccw-slide-card")?.querySelector(".ccw-slide-hint");
@@ -2000,7 +2022,7 @@ function mostrarPanelAdmin(profile) {
   document.getElementById("ccw-reservas-prev").onclick = () => { ccwReservasPagina = Math.max(1, ccwReservasPagina - 1); mostrarReservasAdmin(ccwReservasCache); };
   document.getElementById("ccw-reservas-next").onclick = () => { ccwReservasPagina++; mostrarReservasAdmin(ccwReservasCache); };
   seleccionarSeccionAdmin("reservas");
-  document.getElementById("ccw-customer-search").addEventListener("input", buscarClientesDirectorioAdmin);
+  document.getElementById("ccw-customer-search").addEventListener("input", () => { ccwCustomerDirectoryPage = 1; buscarClientesDirectorioAdmin(); });
   document.getElementById("ccw-customer-import").onclick = importarClientesDesdeReservasAdmin;
   document.getElementById("ccw-customer-form").addEventListener("submit", guardarClienteDirectorioAdmin);
   document.getElementById("ccw-customer-clear").onclick = limpiarFormularioClienteAdmin;
