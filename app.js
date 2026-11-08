@@ -1550,6 +1550,120 @@ async function cargarJornadasAdmin() {
   }
 }
 
+
+// Directorio privado: requiere JWT de una administradora activa y políticas RLS en Supabase.
+async function solicitudDirectorioAdmin(path, options = {}) {
+  const token = sessionStorage.getItem("ccw_access_token");
+  if (!token) throw new Error("La sesión administrativa venció. Inicia sesión nuevamente.");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: options.method === "POST" ? "return=representation" : "return=minimal",
+      ...(options.headers || {})
+    }
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.message || body?.details || "No se pudo acceder al directorio. Verifica que hayas ejecutado la migración SQL.");
+  return body;
+}
+
+function limpiarFormularioClienteAdmin() {
+  ["ccw-customer-id","ccw-dir-name","ccw-dir-phone","ccw-dir-email","ccw-dir-address","ccw-dir-vehicles"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("ccw-customer-form-title").textContent = "Registrar cliente";
+}
+
+async function buscarClientesDirectorioAdmin() {
+  const box = document.getElementById("ccw-customer-results");
+  if (!box) return;
+  const term = document.getElementById("ccw-customer-search").value.trim();
+  box.innerHTML = "<p>Buscando clientes…</p>";
+  try {
+    const query = new URLSearchParams({ select: "id,full_name,phone,email,address,customer_vehicles(id,license_plate,vehicle_type)", order: "full_name.asc", limit: "100" });
+    let rows;
+    if (term) {
+      query.set("or", `(full_name.ilike.*${term}*,phone.ilike.*${term}*,address.ilike.*${term}*)`);
+      rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
+      const vehicleQuery = new URLSearchParams({ select: "customer_id", license_plate: `ilike.*${term}*`, limit: "100" });
+      const vehicleMatches = await solicitudDirectorioAdmin(`customer_vehicles?${vehicleQuery.toString()}`);
+      const ids = [...new Set((vehicleMatches || []).map(v => v.customer_id).filter(Boolean))];
+      if (ids.length) {
+        const byPlateQuery = new URLSearchParams({ select: "id,full_name,phone,email,address,customer_vehicles(id,license_plate,vehicle_type)", order: "full_name.asc", id: `in.(${ids.join(",")})` });
+        const byPlate = await solicitudDirectorioAdmin(`customers?${byPlateQuery.toString()}`);
+        const merged = new Map((rows || []).map(c => [c.id, c]));
+        (byPlate || []).forEach(c => merged.set(c.id, c));
+        rows = [...merged.values()].sort((a, b) => a.full_name.localeCompare(b.full_name));
+      }
+    } else {
+      rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
+    }
+    const list = Array.isArray(rows) ? rows : [];
+    box.innerHTML = list.length ? list.map(c => {
+      const vehicles = Array.isArray(c.customer_vehicles) ? c.customer_vehicles : [];
+      const vehicleText = vehicles.map(v => [v.license_plate, v.vehicle_type].filter(Boolean).join(" · ")).join(" / ");
+      return `<article style="background:white;border:1px solid #d7e1da;border-radius:10px;padding:12px;display:grid;gap:5px">
+        <strong>${escaparHTML(c.full_name)}</strong><span>Teléfono: ${escaparHTML(c.phone)}</span>
+        <span>Correo: ${escaparHTML(c.email || "No registrado")}</span><span>Dirección: ${escaparHTML(c.address)}</span>
+        <span>Vehículos: ${escaparHTML(vehicleText || "No registrados")}</span>
+        <button type="button" data-edit-customer="${escaparHTML(c.id)}" style="padding:9px">Editar ficha</button>
+      </article>`;
+    }).join("") : "<p>No se encontraron clientes registrados.</p>";
+    box.querySelectorAll("[data-edit-customer]").forEach(btn => btn.onclick = () => {
+      const c = list.find(item => item.id === btn.dataset.editCustomer);
+      if (!c) return;
+      document.getElementById("ccw-customer-id").value = c.id;
+      document.getElementById("ccw-dir-name").value = c.full_name || "";
+      document.getElementById("ccw-dir-phone").value = c.phone || "";
+      document.getElementById("ccw-dir-email").value = c.email || "";
+      document.getElementById("ccw-dir-address").value = c.address || "";
+      document.getElementById("ccw-dir-vehicles").value = (c.customer_vehicles || []).map(v => [v.license_plate || "", v.vehicle_type || ""].join(" | ")).join("\n");
+      document.getElementById("ccw-customer-form-title").textContent = "Editar cliente";
+      document.getElementById("ccw-dir-name").focus();
+    });
+  } catch (error) { box.innerHTML = `<p role="alert">${escaparHTML(error.message)}</p>`; }
+}
+
+async function guardarClienteDirectorioAdmin(event) {
+  event.preventDefault();
+  const msg = document.getElementById("ccw-customer-message");
+  const id = document.getElementById("ccw-customer-id").value;
+  const customer = {
+    full_name: document.getElementById("ccw-dir-name").value.trim(),
+    phone: document.getElementById("ccw-dir-phone").value.trim(),
+    email: document.getElementById("ccw-dir-email").value.trim() || null,
+    address: document.getElementById("ccw-dir-address").value.trim()
+  };
+  const vehicleLines = document.getElementById("ccw-dir-vehicles").value.split("\n").map(line => line.trim()).filter(Boolean);
+  const vehicles = vehicleLines.map(line => {
+    const [license_plate = "", vehicle_type = ""] = line.split("|").map(value => value.trim());
+    return { license_plate: license_plate || null, vehicle_type: vehicle_type || null };
+  });
+  const validTypes = ["", "sedan", "suv", "4x4", "pickup", "busito"];
+  if (vehicles.some(v => !v.license_plate || !validTypes.includes(v.vehicle_type))) {
+    msg.textContent = "Cada vehículo debe tener placa y un tipo válido: sedan, suv, 4x4, pickup o busito.";
+    return;
+  }
+  try {
+    msg.textContent = "Guardando ficha…";
+    let customerId = id;
+    if (id) {
+      await solicitudDirectorioAdmin(`customers?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(customer) });
+    } else {
+      const created = await solicitudDirectorioAdmin("customers", { method: "POST", body: JSON.stringify(customer) });
+      customerId = created?.[0]?.id;
+      if (!customerId) throw new Error("El cliente se guardó, pero no se recibió su identificador.");
+    }
+    const existing = await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}&select=id`);
+    if (existing.length) await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}`, { method: "DELETE" });
+    if (vehicles.length) await solicitudDirectorioAdmin("customer_vehicles", { method: "POST", body: JSON.stringify(vehicles.map(v => ({ ...v, customer_id: customerId }))) });
+    msg.textContent = "Ficha guardada correctamente.";
+    limpiarFormularioClienteAdmin();
+    await buscarClientesDirectorioAdmin();
+  } catch (error) { msg.textContent = error.message; }
+}
+
 function mostrarPanelAdmin(profile) {
   estiloBase();
   document.body.innerHTML = `
@@ -1566,6 +1680,7 @@ function mostrarPanelAdmin(profile) {
       <div class="ccw-admin-layout">
       <aside class="ccw-admin-sidebar"><strong style="padding:8px 10px;font-size:16px">MENÚ ADMINISTRATIVO</strong><nav class="ccw-admin-nav-wrap" style="display:grid;gap:5px">
       <button class="ccw-admin-nav" data-admin-section="reservas" aria-current="page">▦ Reservas de clientes</button>
+      <button class="ccw-admin-nav" data-admin-section="clientes">♧ Agenda de clientes</button>
       <button class="ccw-admin-nav" data-admin-section="comisiones">＄ Comisiones</button>
       <button class="ccw-admin-nav" data-admin-section="lavadores">♙ Registro de lavadores</button>
       <button class="ccw-admin-nav" data-admin-section="jornadas">◷ Jornada y disponibilidad</button>
@@ -1619,6 +1734,27 @@ function mostrarPanelAdmin(profile) {
         <button id="ccw-publish-plan" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Publicar jornada</button>
         <p id="ccw-plan-message" role="status"></p><button id="ccw-refresh-plans" type="button" style="padding:12px">Consultar jornadas publicadas</button><div id="ccw-plans-list" style="display:grid;gap:8px"></div>
       </section>
+      <section id="ccw-admin-clientes" class="ccw-admin-section" style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
+        <h3 style="margin:0">Agenda privada de clientes</h3>
+        <p style="margin:0">Directorio interno de administración. Los datos no se muestran en la reserva pública.</p>
+        <input id="ccw-customer-search" type="search" placeholder="Buscar por nombre, teléfono, dirección o placa" style="padding:12px">
+        <div id="ccw-customer-results" style="display:grid;gap:8px"><p>Consulta el directorio para comenzar.</p></div>
+        <hr style="border:0;border-top:1px solid #d5e3d9;width:100%">
+        <h4 id="ccw-customer-form-title" style="margin:0">Registrar cliente</h4>
+        <form id="ccw-customer-form" style="display:grid;gap:10px">
+          <input id="ccw-customer-id" type="hidden">
+          <label>Nombre completo<input id="ccw-dir-name" required maxlength="120" style="display:block;width:100%;padding:11px"></label>
+          <label>Teléfono<input id="ccw-dir-phone" required maxlength="30" style="display:block;width:100%;padding:11px"></label>
+          <label>Correo electrónico<input id="ccw-dir-email" type="email" maxlength="254" style="display:block;width:100%;padding:11px"></label>
+          <label>Dirección / número de casa<input id="ccw-dir-address" required maxlength="250" style="display:block;width:100%;padding:11px"></label>
+          <fieldset style="display:grid;gap:8px;border:1px solid #d7e1da;padding:12px;border-radius:10px">
+            <legend>Vehículo principal (opcional)</legend>
+            <label>Vehículos (uno por línea: placa | tipo)<textarea id="ccw-dir-vehicles" rows="3" placeholder="ABC123 | sedan&#10;XYZ456 | suv" style="display:block;width:100%;padding:11px"></textarea></label>
+          </fieldset>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" style="flex:1;padding:12px;background:#18764e;color:white;border:0">Guardar cliente</button><button id="ccw-customer-clear" type="button" style="padding:12px">Limpiar</button></div>
+        </form>
+        <p id="ccw-customer-message" role="status"></p>
+      </section>
       <section id="ccw-admin-pin" class="ccw-admin-section" style="display:grid;gap:10px;background:white;border:1px solid #d8e2dc;border-radius:12px;padding:16px"><h3 style="margin:0">Generar PIN</h3>
       <label for="ccw-washer">Seleccionar lavador</label>
       <select id="ccw-washer" style="padding:12px">
@@ -1632,7 +1768,7 @@ function mostrarPanelAdmin(profile) {
       <p id="ccw-pin-message" role="status"></p></section>
       </main></div>`;
 
-  const adminSectionIds = { reservas: "ccw-admin-reservas", comisiones: "ccw-admin-comisiones", lavadores: "ccw-admin-lavadores", jornadas: "ccw-admin-jornadas", pin: "ccw-admin-pin", notificaciones: "ccw-admin-notificaciones" };
+  const adminSectionIds = { reservas: "ccw-admin-reservas", clientes: "ccw-admin-clientes", comisiones: "ccw-admin-comisiones", lavadores: "ccw-admin-lavadores", jornadas: "ccw-admin-jornadas", pin: "ccw-admin-pin", notificaciones: "ccw-admin-notificaciones" };
   function seleccionarSeccionAdmin(key) {
     Object.entries(adminSectionIds).forEach(([name, id]) => { const section = document.getElementById(id); if (section) section.style.display = name === key ? "grid" : "none"; });
     document.querySelectorAll("[data-admin-section]").forEach(btn => { if (btn.dataset.adminSection === key) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current"); });
@@ -1644,6 +1780,10 @@ function mostrarPanelAdmin(profile) {
   document.getElementById("ccw-reservas-prev").onclick = () => { ccwReservasPagina = Math.max(1, ccwReservasPagina - 1); mostrarReservasAdmin(ccwReservasCache); };
   document.getElementById("ccw-reservas-next").onclick = () => { ccwReservasPagina++; mostrarReservasAdmin(ccwReservasCache); };
   seleccionarSeccionAdmin("reservas");
+  document.getElementById("ccw-customer-search").addEventListener("input", buscarClientesDirectorioAdmin);
+  document.getElementById("ccw-customer-form").addEventListener("submit", guardarClienteDirectorioAdmin);
+  document.getElementById("ccw-customer-clear").onclick = limpiarFormularioClienteAdmin;
+
 
   const partesFechaPanama = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Panama", year: "numeric", month: "2-digit", day: "2-digit"
