@@ -350,7 +350,7 @@ function mostrarTarifasServicio(servicio) {
   return `${lista}${aviso}`;
 }
 
-async function mostrarCliente() {
+async function mostrarCliente(clienteRegistrado = null) {
   estiloBase();
   document.body.innerHTML = `
     ${cabecera("Agendar una cita")}
@@ -453,7 +453,19 @@ async function mostrarCliente() {
       </section>
     </main>`;
 
-  document.getElementById("ccw-client-back").onclick = () => mostrarInicio();
+  const backButton = document.getElementById("ccw-client-back");
+  backButton.textContent = clienteRegistrado ? "Volver a la agenda de clientes" : "Volver al inicio";
+  backButton.onclick = async () => {
+    if (!clienteRegistrado) { mostrarInicio(); return; }
+    try {
+      const session = await obtenerSesionAdmin();
+      if (session) {
+        mostrarPanelAdmin(session.perfil);
+        seleccionarSeccionAdmin("clientes");
+        buscarClientesDirectorioAdmin();
+      } else mostrarLoginAdmin();
+    } catch { cerrarSesion(); mostrarLoginAdmin(); }
+  };
 
   const form = document.getElementById("ccw-booking-form");
   const tariffSelect = document.getElementById("ccw-booking-tariff");
@@ -475,6 +487,41 @@ async function mostrarCliente() {
   const plateWrap = document.getElementById("ccw-car-plate-wrap");
   const plateInput = document.getElementById("ccw-car-plate");
   const serviceHelp = document.getElementById("ccw-service-help");
+
+  // Reserva iniciada desde la agenda privada: completar datos sin exponerlos en la URL.
+  if (clienteRegistrado) {
+    document.getElementById("ccw-customer-name").value = clienteRegistrado.full_name || "";
+    document.getElementById("ccw-customer-phone").value = clienteRegistrado.phone || "";
+    document.getElementById("ccw-customer-email").value = clienteRegistrado.email || "";
+    document.getElementById("ccw-customer-address").value = clienteRegistrado.address || "";
+    const vehicles = Array.isArray(clienteRegistrado.customer_vehicles) ? clienteRegistrado.customer_vehicles : [];
+    if (vehicles.length) {
+      const vehiclePicker = document.createElement("label");
+      vehiclePicker.id = "ccw-customer-vehicle-picker";
+      vehiclePicker.style.cssText = "display:grid;gap:6px;padding:12px;background:#edf5ef;border:1px solid #d7e1da;border-radius:9px";
+      vehiclePicker.innerHTML = '<strong>Vehículo del cliente</strong><select id="ccw-customer-vehicle-choice" style="width:100%;padding:12px;border:1px solid #cbd9d0;border-radius:8px;background:white"></select>';
+      document.getElementById("ccw-vehicle-fields").prepend(vehiclePicker);
+      const picker = vehiclePicker.querySelector("select");
+      vehicles.forEach((vehicle, index) => {
+        const label = [vehicle.license_plate, String(vehicle.vehicle_type || "").toUpperCase()].filter(Boolean).join(" · ");
+        picker.add(new Option(label || `Vehículo ${index + 1}`, String(index)));
+      });
+      const applyVehicle = () => {
+        const vehicle = vehicles[Number(picker.value)] || vehicles[0];
+        if (!vehicle) return;
+        const type = String(vehicle.vehicle_type || "").toLowerCase();
+        vehicleTypeSelect.value = type === "pick_up" ? "pickup" : type;
+        plateInput.value = vehicle.license_plate || "";
+        if (selectedCategory && esCategoriaDeVehiculo(selectedCategory)) actualizarServiciosPorCategoria();
+      };
+      picker.addEventListener("change", applyVehicle);
+      applyVehicle();
+    }
+    const intro = document.createElement("p");
+    intro.className = "notice";
+    intro.textContent = `Reserva administrativa para ${clienteRegistrado.full_name || "cliente registrado"}. Verifica los datos y selecciona el servicio, fecha y hora.`;
+    form.prepend(intro);
+  }
   let reservableTariffs = [];
   let catalogServices = [];
   let allTariffs = [];
@@ -1687,9 +1734,14 @@ async function buscarClientesDirectorioAdmin() {
         <strong>${escaparHTML(c.full_name)}</strong><span>Teléfono: ${escaparHTML(c.phone)}</span>
         <span>Correo: ${escaparHTML(c.email || "No registrado")}</span><span>Dirección: ${escaparHTML(c.address)}</span>
         <span>Vehículos: ${escaparHTML(vehicleText || "No registrados")}</span>
+        <button type="button" data-create-booking="${escaparHTML(c.id)}" style="padding:12px;background:#18764e;color:white;border:0;border-radius:9px;font-weight:700;cursor:pointer">＋ Crear reserva con este cliente</button>
         <button type="button" data-edit-customer="${escaparHTML(c.id)}" style="padding:9px">Editar ficha</button>
       </article>`;
     }).join("") : "<p>No se encontraron clientes registrados.</p>";
+    box.querySelectorAll("[data-create-booking]").forEach(btn => btn.onclick = () => {
+      const customer = list.find(item => item.id === btn.dataset.createBooking);
+      if (customer) mostrarCliente(customer);
+    });
     box.querySelectorAll("[data-edit-customer]").forEach(btn => btn.onclick = () => {
       const c = list.find(item => item.id === btn.dataset.editCustomer);
       if (!c) return;
