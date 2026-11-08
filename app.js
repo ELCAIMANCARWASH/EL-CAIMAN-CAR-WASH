@@ -1734,13 +1734,42 @@ async function buscarClientesDirectorioAdmin() {
         <strong>${escaparHTML(c.full_name)}</strong><span>Teléfono: ${escaparHTML(c.phone)}</span>
         <span>Correo: ${escaparHTML(c.email || "No registrado")}</span><span>Dirección: ${escaparHTML(c.address)}</span>
         <span>Vehículos: ${escaparHTML(vehicleText || "No registrados")}</span>
-        <button type="button" data-create-booking="${escaparHTML(c.id)}" style="padding:12px;background:#18764e;color:white;border:0;border-radius:9px;font-weight:700;cursor:pointer">＋ Crear reserva con este cliente</button>
+        <div style="background:#e7f2eb;border:1px solid #c8ddcf;border-radius:12px;padding:10px 14px 12px;display:grid;gap:7px">
+          <label for="ccw-slide-booking-${escaparHTML(c.id)}" style="font-size:14px;font-weight:700;color:#174b35">Desliza para crear reserva</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span aria-hidden="true" style="font-size:18px;color:#18764e">⇢</span>
+            <input id="ccw-slide-booking-${escaparHTML(c.id)}" type="range" min="0" max="100" value="0" step="1" data-create-booking="${escaparHTML(c.id)}" aria-label="Desliza completamente hacia la derecha para crear una reserva con este cliente" style="flex:1;min-width:0;height:34px;accent-color:#18764e;cursor:grab;touch-action:pan-y">
+            <span aria-hidden="true" style="font-size:18px;color:#18764e">＋</span>
+          </div>
+          <small style="color:#52655a">Mantén presionado el control y arrástralo hasta el extremo derecho.</small>
+        </div>
         <button type="button" data-edit-customer="${escaparHTML(c.id)}" style="padding:9px">Editar ficha</button>
       </article>`;
     }).join("") : "<p>No se encontraron clientes registrados.</p>";
-    box.querySelectorAll("[data-create-booking]").forEach(btn => btn.onclick = () => {
-      const customer = list.find(item => item.id === btn.dataset.createBooking);
-      if (customer) mostrarCliente(customer);
+    box.querySelectorAll("[data-create-booking]").forEach(slider => {
+      let startX = null;
+      slider.addEventListener("pointerdown", event => {
+        startX = event.clientX;
+        slider.style.cursor = "grabbing";
+      });
+      const finishSlide = event => {
+        if (startX === null) return;
+        const moved = Math.abs(event.clientX - startX);
+        startX = null;
+        slider.style.cursor = "grab";
+        if (moved >= 70 && Number(slider.value) >= 98) {
+          const customer = list.find(item => item.id === slider.dataset.createBooking);
+          if (customer) mostrarCliente(customer);
+        } else {
+          slider.value = "0";
+        }
+      };
+      slider.addEventListener("pointerup", finishSlide);
+      slider.addEventListener("pointercancel", () => { startX = null; slider.value = "0"; slider.style.cursor = "grab"; });
+      slider.addEventListener("change", () => {
+        // Un clic en la pista no activa la acción: se exige arrastre físico del control.
+        if (startX === null) slider.value = "0";
+      });
     });
     box.querySelectorAll("[data-edit-customer]").forEach(btn => btn.onclick = () => {
       const c = list.find(item => item.id === btn.dataset.editCustomer);
