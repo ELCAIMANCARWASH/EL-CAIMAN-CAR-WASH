@@ -983,9 +983,9 @@ function mostrarLoginAdmin() {
     ${cabecera("Acceso administrativo")}
     <main style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-login" style="display:grid;gap:14px">
-        <label for="ccw-email">Correo de administración</label>
+        <label for="ccw-email" style="color:#fff;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.95)">Correo de administración</label>
         <input id="ccw-email" type="email" autocomplete="username" required style="padding:12px">
-        <label for="ccw-password">Contraseña</label>
+        <label for="ccw-password" style="color:#fff;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.95)">Contraseña</label>
         <input id="ccw-password" type="password" autocomplete="current-password" required style="padding:12px">
         <button type="submit" style="padding:13px;background:#18764e;color:white;border:0;border-radius:8px">Iniciar sesión</button>
         <p id="ccw-message" role="status"></p>
@@ -1621,19 +1621,41 @@ async function publicarJornadaAdmin() {
 async function cargarJornadasAdmin() {
   const list = document.getElementById("ccw-plans-list");
   const msg = document.getElementById("ccw-plan-message");
+  const hint = document.getElementById("ccw-plans-hint");
+  const selectedDate = document.getElementById("ccw-plan-history-date")?.value || "";
   if (!list) return;
 
+  list.innerHTML = "<p>Consultando jornadas…</p>";
+  if (msg) msg.textContent = "";
   try {
     const result = await llamarAdminLavador({ action: "list_plans" });
     if (!result || result.success !== true) {
       throw new Error(result?.error || "El servidor no confirmó la consulta de jornadas.");
     }
-    list.innerHTML = (result.plans || []).map(p => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px"><strong>${escaparHTML(p.plan_date)}</strong><div>${escaparHTML(formatearHoraPanama(p.opening_time))}–${escaparHTML(formatearHoraPanama(p.closing_time))}</div><div>${p.published_at ? "Publicada" : "Borrador"}</div>${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}</div>`).join("") || "No hay jornadas registradas.";
+    const published = (result.plans || [])
+      .filter(p => Boolean(p.published_at))
+      .sort((a, b) => String(b.plan_date).localeCompare(String(a.plan_date)));
+    let visible;
+    if (selectedDate) {
+      visible = published.filter(p => String(p.plan_date).slice(0, 10) === selectedDate);
+      if (hint) hint.textContent = `Resultado para la fecha ${selectedDate}.`;
+    } else {
+      visible = published.slice(0, 3);
+      if (hint) hint.textContent = "Mostrando las últimas 3 jornadas publicadas. Selecciona una fecha para consultar una jornada anterior.";
+    }
+    list.innerHTML = visible.map(p => `<article style="border:1px solid #d8e4dc;border-radius:10px;padding:12px;background:white;display:grid;gap:4px">
+      <strong>${escaparHTML(p.plan_date)}</strong>
+      <div>${escaparHTML(formatearHoraPanama(p.opening_time))}–${escaparHTML(formatearHoraPanama(p.closing_time))}</div>
+      <div style="color:#18764e;font-weight:700">Publicada</div>
+      ${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}
+    </article>`).join("") || (selectedDate
+      ? `<p>No hay una jornada publicada para el ${escaparHTML(selectedDate)}.</p>`
+      : "<p>No hay jornadas publicadas en el historial.</p>");
   } catch (error) {
+    list.innerHTML = "";
     if (msg) msg.textContent = error.message || "No se pudieron consultar las jornadas.";
   }
 }
-
 
 // Directorio privado: requiere JWT de una administradora activa y políticas RLS en Supabase.
 async function solicitudDirectorioAdmin(path, options = {}) {
@@ -1969,7 +1991,16 @@ function mostrarPanelAdmin(profile) {
         <label>Notas<textarea id="ccw-plan-notes" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px"></textarea></label>
         <p>Marca los lavadores disponibles y establece su horario individual.</p><div id="ccw-plan-washer-list" style="display:grid;gap:10px"></div>
         <button id="ccw-publish-plan" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:bold">Publicar jornada</button>
-        <p id="ccw-plan-message" role="status"></p><button id="ccw-refresh-plans" type="button" style="padding:12px">Consultar jornadas publicadas</button><div id="ccw-plans-list" style="display:grid;gap:8px"></div>
+        <p id="ccw-plan-message" role="status"></p>
+        <div style="display:grid;gap:8px;background:#f1f6f2;border:1px solid #d8e4dc;border-radius:10px;padding:12px">
+          <strong>Historial de jornadas publicadas</strong>
+          <label for="ccw-plan-history-date">Consultar una fecha específica (opcional)
+            <input id="ccw-plan-history-date" type="date" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px">
+          </label>
+          <button id="ccw-refresh-plans" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:700">Consultar jornadas publicadas</button>
+          <small id="ccw-plans-hint" style="color:#52655a">El historial no se carga automáticamente. Al consultar, verás las últimas 3 jornadas o la fecha que selecciones.</small>
+          <div id="ccw-plans-list" style="display:grid;gap:8px"><p style="margin:0">Pulsa «Consultar jornadas publicadas» para ver el historial.</p></div>
+        </div>
       </section>
       <section id="ccw-admin-clientes" class="ccw-admin-section" style="display:grid;gap:12px;background:#edf5ef;border-radius:12px;padding:16px">
         <h3 style="margin:0">Agenda privada de clientes</h3>
@@ -2046,7 +2077,11 @@ function mostrarPanelAdmin(profile) {
   document.getElementById("ccw-publish-plan").onclick = publicarJornadaAdmin;
   document.getElementById("ccw-refresh-plans").onclick = cargarJornadasAdmin;
   document.getElementById("ccw-plan-date").addEventListener("change", cargarDisponibilidadJornadaAdmin);
-  cargarLavadoresAdmin(); cargarJornadasAdmin();
+  document.getElementById("ccw-plan-history-date").addEventListener("change", () => {
+    const hint = document.getElementById("ccw-plans-hint");
+    if (hint) hint.textContent = "Fecha seleccionada. Pulsa «Consultar jornadas publicadas» para buscar ese día.";
+  });
+  cargarLavadoresAdmin();
 
   document.getElementById("ccw-push-enable").onclick = activarNotificacionesAdmin;
   document.getElementById("ccw-reservas-refresh").onclick = actualizarReservasAdmin;
