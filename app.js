@@ -1571,7 +1571,7 @@ async function solicitudDirectorioAdmin(path, options = {}) {
 }
 
 function limpiarFormularioClienteAdmin() {
-  ["ccw-customer-id","ccw-dir-name","ccw-dir-phone","ccw-dir-email","ccw-dir-address","ccw-dir-plate"].forEach(id => document.getElementById(id).value = "");
+  ["ccw-customer-id","ccw-dir-name","ccw-dir-phone","ccw-dir-email","ccw-dir-address","ccw-dir-vehicles"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("ccw-dir-type").value = "";
   document.getElementById("ccw-customer-form-title").textContent = "Registrar cliente";
 }
@@ -1605,8 +1605,7 @@ async function buscarClientesDirectorioAdmin() {
       document.getElementById("ccw-dir-email").value = c.email || "";
       document.getElementById("ccw-dir-address").value = c.address || "";
       const v = (c.customer_vehicles || [])[0] || {};
-      document.getElementById("ccw-dir-plate").value = v.license_plate || "";
-      document.getElementById("ccw-dir-type").value = v.vehicle_type || "";
+      document.getElementById("ccw-dir-vehicles").value = (c.customer_vehicles || []).map(v => [v.license_plate || "", v.vehicle_type || ""].join(" | ")).join("\n");
       document.getElementById("ccw-customer-form-title").textContent = "Editar cliente";
       document.getElementById("ccw-dir-name").focus();
     });
@@ -1623,8 +1622,16 @@ async function guardarClienteDirectorioAdmin(event) {
     email: document.getElementById("ccw-dir-email").value.trim() || null,
     address: document.getElementById("ccw-dir-address").value.trim()
   };
-  const plate = document.getElementById("ccw-dir-plate").value.trim();
-  const vehicleType = document.getElementById("ccw-dir-type").value;
+  const vehicleLines = document.getElementById("ccw-dir-vehicles").value.split("\n").map(line => line.trim()).filter(Boolean);
+  const vehicles = vehicleLines.map(line => {
+    const [license_plate = "", vehicle_type = ""] = line.split("|").map(value => value.trim());
+    return { license_plate: license_plate || null, vehicle_type: vehicle_type || null };
+  });
+  const validTypes = ["", "sedan", "suv", "4x4", "pickup", "busito"];
+  if (vehicles.some(v => !v.license_plate || !validTypes.includes(v.vehicle_type))) {
+    msg.textContent = "Cada vehículo debe tener placa y un tipo válido: sedan, suv, 4x4, pickup o busito.";
+    return;
+  }
   try {
     msg.textContent = "Guardando ficha…";
     let customerId = id;
@@ -1635,11 +1642,9 @@ async function guardarClienteDirectorioAdmin(event) {
       customerId = created?.[0]?.id;
       if (!customerId) throw new Error("El cliente se guardó, pero no se recibió su identificador.");
     }
-    if (plate || vehicleType) {
-      const existing = await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}&select=id`);
-      if (existing.length) await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}`, { method: "DELETE" });
-      await solicitudDirectorioAdmin("customer_vehicles", { method: "POST", body: JSON.stringify({ customer_id: customerId, license_plate: plate || null, vehicle_type: vehicleType || null }) });
-    }
+    const existing = await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}&select=id`);
+    if (existing.length) await solicitudDirectorioAdmin(`customer_vehicles?customer_id=eq.${encodeURIComponent(customerId)}`, { method: "DELETE" });
+    if (vehicles.length) await solicitudDirectorioAdmin("customer_vehicles", { method: "POST", body: JSON.stringify(vehicles.map(v => ({ ...v, customer_id: customerId }))) });
     msg.textContent = "Ficha guardada correctamente.";
     limpiarFormularioClienteAdmin();
     await buscarClientesDirectorioAdmin();
@@ -1731,8 +1736,7 @@ function mostrarPanelAdmin(profile) {
           <label>Dirección / número de casa<input id="ccw-dir-address" required maxlength="250" style="display:block;width:100%;padding:11px"></label>
           <fieldset style="display:grid;gap:8px;border:1px solid #d7e1da;padding:12px;border-radius:10px">
             <legend>Vehículo principal (opcional)</legend>
-            <label>Placa<input id="ccw-dir-plate" maxlength="30" style="display:block;width:100%;padding:11px"></label>
-            <label>Tipo de vehículo<select id="ccw-dir-type" style="display:block;width:100%;padding:11px"><option value="">No aplica</option><option value="sedan">Sedán</option><option value="suv">SUV</option><option value="4x4">4x4</option><option value="pickup">Pickup</option><option value="busito">Busito</option></select></label>
+            <label>Vehículos (uno por línea: placa | tipo)<textarea id="ccw-dir-vehicles" rows="3" placeholder="ABC123 | sedan&#10;XYZ456 | suv" style="display:block;width:100%;padding:11px"></textarea></label>
           </fieldset>
           <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" style="flex:1;padding:12px;background:#18764e;color:white;border:0">Guardar cliente</button><button id="ccw-customer-clear" type="button" style="padding:12px">Limpiar</button></div>
         </form>
