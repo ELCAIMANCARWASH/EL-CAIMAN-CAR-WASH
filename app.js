@@ -208,7 +208,22 @@ function escaparHTML(value) {
 
 function estiloBase() {
   document.body.style.cssText =
-    "margin:0;background-color:#f4f7f5;color:#183126;font-family:Arial,sans-serif;min-height:100vh;background-image:linear-gradient(135deg,rgba(10,35,24,.48),rgba(16,37,29,.58)),url('./fondo-login-carwash.jpg');background-size:cover;background-position:center;background-attachment:fixed;background-repeat:no-repeat";
+    "margin:0;background-color:#10251d;color:#183126;font-family:Arial,sans-serif;min-height:100vh;background-image:linear-gradient(135deg,rgba(10,35,24,.38),rgba(16,37,29,.46)),url('./fondo-login-carwash.jpg');background-size:contain;background-position:center top;background-attachment:fixed;background-repeat:no-repeat";
+  if (!document.getElementById("ccw-responsive-background")) {
+    const style = document.createElement("style");
+    style.id = "ccw-responsive-background";
+    style.textContent = `
+      html{min-height:100%;background:#10251d}
+      body{min-height:100vh;box-sizing:border-box}
+      @media(max-width:760px){
+        body{background-size:100% auto;background-position:center top;background-attachment:scroll;background-color:#10251d}
+      }
+      @media(min-width:761px){
+        body{background-size:contain;background-position:center top;background-attachment:fixed;background-color:#10251d}
+      }
+    `;
+    document.head.appendChild(style);
+  }
 }
 
 function cabecera(subtitulo) {
@@ -459,12 +474,26 @@ async function mostrarCliente(clienteRegistrado = null) {
     if (!clienteRegistrado) { mostrarInicio(); return; }
     try {
       const session = await obtenerSesionAdmin();
-      if (session) {
-        mostrarPanelAdmin(session.perfil);
-        seleccionarSeccionAdmin("clientes");
-        buscarClientesDirectorioAdmin();
-      } else mostrarLoginAdmin();
-    } catch { cerrarSesion(); mostrarLoginAdmin(); }
+      if (!session) { mostrarLoginAdmin(); return; }
+      mostrarPanelAdmin(session.perfil);
+      // El selector está dentro del ámbito de mostrarPanelAdmin; activar su botón
+      // evita llamar una función local desde fuera y conserva la sesión vigente.
+      const agendaButton = document.querySelector('[data-admin-section="clientes"]');
+      if (agendaButton) agendaButton.click();
+    } catch (error) {
+      // No borrar credenciales ante un fallo transitorio de red o de renderizado.
+      const token = sessionStorage.getItem("ccw_access_token");
+      if (token) {
+        const cachedProfile = window.ccwAdminProfileCache;
+        if (cachedProfile) {
+          mostrarPanelAdmin(cachedProfile);
+          document.querySelector('[data-admin-section="clientes"]')?.click();
+          return;
+        }
+      }
+      const message = document.getElementById("ccw-booking-message");
+      if (message) message.textContent = "No se pudo recuperar la agenda. Tu sesión se conserva; intenta nuevamente.";
+    }
   };
 
   const form = document.getElementById("ccw-booking-form");
@@ -1826,6 +1855,7 @@ async function guardarClienteDirectorioAdmin(event) {
 }
 
 function mostrarPanelAdmin(profile) {
+  window.ccwAdminProfileCache = profile;
   estiloBase();
   document.body.innerHTML = `
     ${cabecera("Panel administrativo")}
