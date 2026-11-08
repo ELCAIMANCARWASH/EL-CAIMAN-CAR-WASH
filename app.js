@@ -215,8 +215,16 @@ function estiloBase() {
     style.textContent = `
       html{min-height:100%;background:#10251d}
       body{min-height:100vh;box-sizing:border-box}
+      .ccw-slide-range{-webkit-appearance:none;appearance:none;height:32px;background:transparent;outline:none}
+      .ccw-slide-range::-webkit-slider-runnable-track{height:9px;border-radius:99px;background:linear-gradient(to right,#18764e var(--ccw-slide-progress,0%),#cbd9d0 var(--ccw-slide-progress,0%))}
+      .ccw-slide-range::-moz-range-track{height:9px;border-radius:99px;background:#cbd9d0}
+      .ccw-slide-range::-moz-range-progress{height:9px;border-radius:99px;background:#18764e}
+      .ccw-slide-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:30px;height:30px;margin-top:-10px;border:4px solid #fff;border-radius:50%;background:#18764e;box-shadow:0 2px 8px rgba(12,50,32,.28)}
+      .ccw-slide-range::-moz-range-thumb{width:22px;height:22px;border:4px solid #fff;border-radius:50%;background:#18764e;box-shadow:0 2px 8px rgba(12,50,32,.28)}
+      .ccw-slide-range:focus-visible{outline:2px solid #18764e;outline-offset:5px;border-radius:20px}
       @media(max-width:760px){
         body{background-size:100% auto;background-position:center top;background-attachment:scroll;background-color:#10251d}
+        .ccw-slide-card{padding:12px!important}
       }
       @media(min-width:761px){
         body{background-size:contain;background-position:center top;background-attachment:fixed;background-color:#10251d}
@@ -1763,41 +1771,57 @@ async function buscarClientesDirectorioAdmin() {
         <strong>${escaparHTML(c.full_name)}</strong><span>Teléfono: ${escaparHTML(c.phone)}</span>
         <span>Correo: ${escaparHTML(c.email || "No registrado")}</span><span>Dirección: ${escaparHTML(c.address)}</span>
         <span>Vehículos: ${escaparHTML(vehicleText || "No registrados")}</span>
-        <div style="background:#e7f2eb;border:1px solid #c8ddcf;border-radius:12px;padding:10px 14px 12px;display:grid;gap:7px">
-          <label for="ccw-slide-booking-${escaparHTML(c.id)}" style="font-size:14px;font-weight:700;color:#174b35">Desliza para crear reserva</label>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span aria-hidden="true" style="font-size:18px;color:#18764e">⇢</span>
-            <input id="ccw-slide-booking-${escaparHTML(c.id)}" type="range" min="0" max="100" value="0" step="1" data-create-booking="${escaparHTML(c.id)}" aria-label="Desliza completamente hacia la derecha para crear una reserva con este cliente" style="flex:1;min-width:0;height:34px;accent-color:#18764e;cursor:grab;touch-action:pan-y">
-            <span aria-hidden="true" style="font-size:18px;color:#18764e">＋</span>
+        <div class="ccw-slide-card" style="background:linear-gradient(135deg,#f2f8f4,#e3f0e8);border:1px solid #c5ddce;border-radius:14px;padding:13px 16px 12px;display:grid;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <label for="ccw-slide-booking-${escaparHTML(c.id)}" style="font-size:14px;font-weight:800;color:#174b35;letter-spacing:.1px">Crear reserva</label>
+            <small style="font-size:11px;font-weight:700;color:#47745b">CONFIRMACIÓN SEGURA</small>
           </div>
-          <small style="color:#52655a">Mantén presionado el control y arrástralo hasta el extremo derecho.</small>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span aria-hidden="true" style="font-size:17px;font-weight:800;color:#18764e">DESLIZA</span>
+            <input class="ccw-slide-range" id="ccw-slide-booking-${escaparHTML(c.id)}" type="range" min="0" max="100" value="0" step="1" data-create-booking="${escaparHTML(c.id)}" aria-valuetext="Desliza hacia la derecha para continuar" aria-label="Mantén presionado y desliza hasta el final para crear una reserva" style="--ccw-slide-progress:0%;flex:1;min-width:0;cursor:grab;touch-action:pan-y">
+            <span aria-hidden="true" style="font-size:22px;font-weight:800;color:#18764e">›</span>
+          </div>
+          <small class="ccw-slide-hint" style="color:#526b5c;font-size:12px">Mantén presionado y desliza hasta el final para continuar.</small>
         </div>
         <button type="button" data-edit-customer="${escaparHTML(c.id)}" style="padding:9px">Editar ficha</button>
       </article>`;
     }).join("") : "<p>No se encontraron clientes registrados.</p>";
     box.querySelectorAll("[data-create-booking]").forEach(slider => {
       let startX = null;
+      const hint = slider.closest(".ccw-slide-card")?.querySelector(".ccw-slide-hint");
+      const reset = () => {
+        slider.value = "0";
+        slider.style.setProperty("--ccw-slide-progress", "0%");
+        slider.setAttribute("aria-valuetext", "Desliza hacia la derecha para continuar");
+        if (hint) hint.textContent = "Mantén presionado y desliza hasta el final para continuar.";
+      };
       slider.addEventListener("pointerdown", event => {
         startX = event.clientX;
         slider.style.cursor = "grabbing";
+        try { slider.setPointerCapture(event.pointerId); } catch {}
+      });
+      slider.addEventListener("input", () => {
+        const progress = Math.max(0, Math.min(100, Number(slider.value) || 0));
+        slider.style.setProperty("--ccw-slide-progress", progress + "%");
+        slider.setAttribute("aria-valuetext", progress >= 98 ? "Listo para crear la reserva" : `Progreso ${Math.round(progress)} por ciento`);
+        if (hint) hint.textContent = progress >= 98 ? "Suelta para abrir la reserva." : "Desliza hasta el extremo derecho.";
       });
       const finishSlide = event => {
         if (startX === null) return;
-        const moved = Math.abs(event.clientX - startX);
+        const movedRight = event.clientX - startX;
         startX = null;
         slider.style.cursor = "grab";
-        if (moved >= 70 && Number(slider.value) >= 98) {
+        if (movedRight >= 70 && Number(slider.value) >= 98) {
           const customer = list.find(item => item.id === slider.dataset.createBooking);
-          if (customer) mostrarCliente(customer);
-        } else {
-          slider.value = "0";
+          if (customer) { mostrarCliente(customer); return; }
         }
+        reset();
       };
       slider.addEventListener("pointerup", finishSlide);
-      slider.addEventListener("pointercancel", () => { startX = null; slider.value = "0"; slider.style.cursor = "grab"; });
+      slider.addEventListener("pointercancel", () => { startX = null; slider.style.cursor = "grab"; reset(); });
       slider.addEventListener("change", () => {
-        // Un clic en la pista no activa la acción: se exige arrastre físico del control.
-        if (startX === null) slider.value = "0";
+        // El teclado o un clic aislado no confirman la acción: solo un arrastre completo.
+        if (startX === null) reset();
       });
     });
     box.querySelectorAll("[data-edit-customer]").forEach(btn => btn.onclick = () => {
