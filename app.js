@@ -280,8 +280,8 @@ function mostrarInicio(mensaje = "") {
   document.body.innerHTML = `
     ${cabecera("Lavado profesional · Reservas y atención")}
     <main style="max-width:520px;margin:32px auto;padding:20px;display:grid;gap:16px">
-      <h2 style="text-align:center">Bienvenido</h2>
-      <p style="text-align:center">Selecciona cómo deseas ingresar.</p>
+      <h2 style="text-align:center;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.85);user-select:none;-webkit-user-select:none">Bienvenido</h2>
+      <p style="text-align:center;color:#fff;text-shadow:0 2px 7px rgba(0,0,0,.9);user-select:none;-webkit-user-select:none">Selecciona cómo deseas ingresar.</p>
       ${boton("Soy cliente · Reservar lavado", "ccw-cliente")}
       ${boton("Administración", "ccw-admin")}
       ${boton("Acceso del lavador", "ccw-lavador")}
