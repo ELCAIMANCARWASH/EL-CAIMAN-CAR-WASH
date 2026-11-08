@@ -208,7 +208,7 @@ function escaparHTML(value) {
 
 function estiloBase() {
   document.body.style.cssText =
-    "margin:0;background:#f4f7f5;color:#183126;font-family:Arial,sans-serif";
+    "margin:0;background-color:#f4f7f5;color:#183126;font-family:Arial,sans-serif;min-height:100vh;background-image:linear-gradient(135deg,rgba(10,35,24,.48),rgba(16,37,29,.58)),url('./fondo-login-carwash.jpg');background-size:cover;background-position:center;background-attachment:fixed;background-repeat:no-repeat";
 }
 
 function cabecera(subtitulo) {
@@ -1575,6 +1575,86 @@ function limpiarFormularioClienteAdmin() {
   document.getElementById("ccw-customer-form-title").textContent = "Registrar cliente";
 }
 
+function normalizarTelefonoDirectorio(value) {
+  const digits = String(value || "").replace(/\\D/g, "");
+  return digits || String(value || "").trim().toLowerCase();
+}
+
+function normalizarTipoVehiculoDirectorio(value) {
+  const raw = String(value || "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").trim().toLowerCase();
+  if (["sedan", "sedán", "carro"].includes(raw)) return "sedan";
+  if (raw === "suv") return "suv";
+  if (raw === "4x4" || raw === "4 x 4") return "4x4";
+  if (["pickup", "pick_up", "pick-up", "pick up", "camioneta"].includes(raw)) return "pickup";
+  if (["busito", "minivan"].includes(raw)) return "busito";
+  return "";
+}
+
+async function importarClientesDesdeReservasAdmin() {
+  const button = document.getElementById("ccw-customer-import");
+  const message = document.getElementById("ccw-customer-import-message");
+  if (!button || !message) return;
+  button.disabled = true;
+  message.textContent = "Consultando reservas históricas…";
+  try {
+    const reservations = await cargarReservasAdmin();
+    const existingRows = await solicitudDirectorioAdmin("customers?select=id,full_name,phone,email,address,customer_vehicles(license_plate,vehicle_type)&limit=5000");
+    const byPhone = new Map((existingRows || []).map(c => [normalizarTelefonoDirectorio(c.phone), c]));
+    let createdCount = 0, updatedCount = 0, vehicleCount = 0, skippedCount = 0;
+    for (const reservation of reservations) {
+      const name = String(reservation.customer_name || reservation.full_name || "").trim();
+      const phone = String(reservation.customer_phone || reservation.phone || "").trim();
+      if (!name || !phone) { skippedCount++; continue; }
+      const email = String(reservation.customer_email || reservation.email || "").trim() || null;
+      const address = String(reservation.customer_address || reservation.house_number || reservation.address || "").trim() || "Pendiente de completar";
+      const phoneKey = normalizarTelefonoDirectorio(phone);
+      let customer = byPhone.get(phoneKey);
+      if (!customer) {
+        const inserted = await solicitudDirectorioAdmin("customers", {
+          method: "POST",
+          body: JSON.stringify({ full_name: name, phone, email, address })
+        });
+        customer = inserted?.[0];
+        if (!customer?.id) throw new Error("Supabase no devolvió el identificador del cliente importado.");
+        customer.customer_vehicles = [];
+        byPhone.set(phoneKey, customer);
+        createdCount++;
+      } else {
+        const patch = {};
+        if (!customer.email && email) patch.email = email;
+        if ((!customer.address || customer.address === "Pendiente de completar") && address !== "Pendiente de completar") patch.address = address;
+        if (Object.keys(patch).length) {
+          await solicitudDirectorioAdmin(`customers?id=eq.${encodeURIComponent(customer.id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+          Object.assign(customer, patch);
+          updatedCount++;
+        }
+      }
+      const vehicles = Array.isArray(reservation.vehicles) ? reservation.vehicles : [];
+      const existingPlates = new Set((customer.customer_vehicles || []).map(v => String(v.license_plate || "").trim().toUpperCase()).filter(Boolean));
+      const newVehicles = [];
+      for (const vehicle of vehicles) {
+        const plate = String(vehicle.license_plate || vehicle.plate || vehicle.registration || "").trim();
+        const type = normalizarTipoVehiculoDirectorio(vehicle.vehicle_type || vehicle.tipo_vehiculo || vehicle.car_type);
+        const plateKey = plate.toUpperCase();
+        if (!plate || !type || existingPlates.has(plateKey)) continue;
+        existingPlates.add(plateKey);
+        newVehicles.push({ customer_id: customer.id, license_plate: plate, vehicle_type: type });
+      }
+      if (newVehicles.length) {
+        await solicitudDirectorioAdmin("customer_vehicles", { method: "POST", body: JSON.stringify(newVehicles) });
+        customer.customer_vehicles = [...(customer.customer_vehicles || []), ...newVehicles];
+        vehicleCount += newVehicles.length;
+      }
+    }
+    message.textContent = `Importación terminada: ${createdCount} clientes nuevos, ${updatedCount} fichas completadas, ${vehicleCount} vehículos añadidos. Reservas sin nombre o teléfono: ${skippedCount}.`;
+    await buscarClientesDirectorioAdmin();
+  } catch (error) {
+    message.textContent = `No se pudo completar la importación: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function buscarClientesDirectorioAdmin() {
   const box = document.getElementById("ccw-customer-results");
   if (!box) return;
@@ -1738,6 +1818,8 @@ function mostrarPanelAdmin(profile) {
         <h3 style="margin:0">Agenda privada de clientes</h3>
         <p style="margin:0">Directorio interno de administración. Los datos no se muestran en la reserva pública.</p>
         <input id="ccw-customer-search" type="search" placeholder="Buscar por nombre, teléfono, dirección o placa" style="padding:12px">
+        <button id="ccw-customer-import" type="button" style="padding:12px;background:#18764e;color:white;border:0;border-radius:8px;font-weight:700">Importar clientes de reservas anteriores</button>
+        <p id="ccw-customer-import-message" role="status" style="margin:0"></p>
         <div id="ccw-customer-results" style="display:grid;gap:8px"><p>Consulta el directorio para comenzar.</p></div>
         <hr style="border:0;border-top:1px solid #d5e3d9;width:100%">
         <h4 id="ccw-customer-form-title" style="margin:0">Registrar cliente</h4>
@@ -1773,7 +1855,10 @@ function mostrarPanelAdmin(profile) {
     Object.entries(adminSectionIds).forEach(([name, id]) => { const section = document.getElementById(id); if (section) section.style.display = name === key ? "grid" : "none"; });
     document.querySelectorAll("[data-admin-section]").forEach(btn => { if (btn.dataset.adminSection === key) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current"); });
   }
-  document.querySelectorAll("[data-admin-section]").forEach(btn => btn.addEventListener("click", () => seleccionarSeccionAdmin(btn.dataset.adminSection)));
+  document.querySelectorAll("[data-admin-section]").forEach(btn => btn.addEventListener("click", () => {
+    seleccionarSeccionAdmin(btn.dataset.adminSection);
+    if (btn.dataset.adminSection === "clientes") buscarClientesDirectorioAdmin();
+  }));
   document.getElementById("ccw-reservas-search").addEventListener("input", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
   document.getElementById("ccw-reservas-filter").addEventListener("change", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
   document.getElementById("ccw-reservas-page-size").addEventListener("change", () => { ccwReservasPagina = 1; mostrarReservasAdmin(ccwReservasCache); });
@@ -1781,6 +1866,7 @@ function mostrarPanelAdmin(profile) {
   document.getElementById("ccw-reservas-next").onclick = () => { ccwReservasPagina++; mostrarReservasAdmin(ccwReservasCache); };
   seleccionarSeccionAdmin("reservas");
   document.getElementById("ccw-customer-search").addEventListener("input", buscarClientesDirectorioAdmin);
+  document.getElementById("ccw-customer-import").onclick = importarClientesDesdeReservasAdmin;
   document.getElementById("ccw-customer-form").addEventListener("submit", guardarClienteDirectorioAdmin);
   document.getElementById("ccw-customer-clear").onclick = limpiarFormularioClienteAdmin;
 
