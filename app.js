@@ -211,53 +211,6 @@ function estiloBase() {
     "margin:0;background:#f4f7f5;color:#183126;font-family:Arial,sans-serif";
 }
 
-
-function estiloFondoLogin() {
-  estiloBase();
-  document.body.style.minHeight = "100vh";
-  document.body.style.background =
-    "linear-gradient(135deg, rgba(5, 20, 15, .72), rgba(5, 20, 15, .58)), url('./fondo-login-carwash.jpg') center / cover fixed no-repeat";
-  document.body.style.backgroundAttachment = "fixed";
-
-  if (!document.getElementById("ccw-login-background-styles")) {
-    const style = document.createElement("style");
-    style.id = "ccw-login-background-styles";
-    style.textContent = `
-      .ccw-auth-panel {
-        width: min(92%, 460px);
-        margin: 34px auto !important;
-        padding: clamp(20px, 4vw, 30px) !important;
-        background: rgba(255, 255, 255, .96);
-        border: 1px solid rgba(255, 255, 255, .65);
-        border-radius: 18px;
-        box-shadow: 0 18px 55px rgba(0, 0, 0, .30);
-        backdrop-filter: blur(8px);
-      }
-      .ccw-auth-panel input {
-        width: 100%;
-        min-height: 46px;
-        border: 1px solid #cbd9d0;
-        border-radius: 9px;
-        background: #fff;
-        color: #183126;
-        font: inherit;
-      }
-      .ccw-auth-panel input:focus {
-        outline: 3px solid rgba(215, 181, 109, .55);
-        border-color: #18764e;
-      }
-      .ccw-auth-panel button {
-        min-height: 46px;
-        font-weight: 700;
-      }
-      @media (max-width: 480px) {
-        .ccw-auth-panel { margin: 22px auto !important; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-}
-
 function cabecera(subtitulo) {
   return `
     <header style="
@@ -300,51 +253,16 @@ function boton(text, id) {
 }
 
 function mostrarInicio(mensaje = "") {
-  estiloFondoLogin();
-
-  if (!document.getElementById("ccw-home-screen-styles")) {
-    const homeStyles = document.createElement("style");
-    homeStyles.id = "ccw-home-screen-styles";
-    homeStyles.textContent = `
-      .ccw-auth-panel.ccw-home-panel {
-        width: min(92%, 620px); margin: 24px auto !important;
-        padding: clamp(22px, 4vw, 38px) !important; display: grid; gap: 16px;
-        text-align: center; background: rgba(255,255,255,.98);
-        border-radius: 22px; box-shadow: 0 22px 65px rgba(0,0,0,.38);
-      }
-      .ccw-home-logo { display:block; width:min(72%,250px); max-height:185px;
-        object-fit:contain; margin:0 auto 2px; border-radius:12px; }
-      .ccw-home-panel h2 { margin:0; color:#142d23; font-size:clamp(25px,3vw,32px); line-height:1.2; }
-      .ccw-home-panel .ccw-home-intro { margin:2px 0 8px; color:#465c52; font-size:18px; line-height:1.5; }
-      .ccw-home-panel button { display:block; width:100%; min-height:58px; padding:15px 18px !important;
-        border-radius:13px !important; background:#18764e !important; color:#fff !important;
-        font-size:17px !important; font-weight:700; box-shadow:0 5px 12px rgba(16,75,48,.14); }
-      .ccw-home-panel button:hover { background:#12633f !important; }
-      .ccw-home-message:empty { display:none; }
-      @media(max-width:600px) {
-        .ccw-auth-panel.ccw-home-panel { width:calc(100% - 28px); margin:18px auto !important; padding:22px 18px !important; gap:13px; }
-        .ccw-home-logo { width:min(68%,205px); max-height:150px; }
-        .ccw-home-panel button { min-height:54px; font-size:16px !important; }
-        .ccw-home-panel .ccw-home-intro { font-size:16px; }
-      }
-    `;
-    document.head.appendChild(homeStyles);
-  }
-
-  document.body.style.minHeight = "100vh";
-  document.body.style.display = "flex";
-  document.body.style.alignItems = "center";
-  document.body.style.justifyContent = "center";
-  document.body.style.padding = "18px 0";
+  estiloBase();
   document.body.innerHTML = `
-    <main class="ccw-auth-panel ccw-home-panel">
-      <img class="ccw-home-logo" src="./logo.png?v=2" alt="Logo de EL CAIMAN CAR WASH" width="1200" height="800">
-      <h2>Bienvenido</h2>
-      <p class="ccw-home-intro">Selecciona cómo deseas ingresar.</p>
+    ${cabecera("Lavado profesional · Reservas y atención")}
+    <main style="max-width:520px;margin:32px auto;padding:20px;display:grid;gap:16px">
+      <h2 style="text-align:center">Bienvenido</h2>
+      <p style="text-align:center">Selecciona cómo deseas ingresar.</p>
       ${boton("Soy cliente · Reservar lavado", "ccw-cliente")}
       ${boton("Administración", "ccw-admin")}
       ${boton("Acceso del lavador", "ccw-lavador")}
-      <p id="ccw-home-message" class="ccw-home-message" role="status">${escaparHTML(mensaje)}</p>
+      <p id="ccw-home-message" role="status">${escaparHTML(mensaje)}</p>
     </main>`;
 
   document.getElementById("ccw-cliente").onclick = () => mostrarCliente();
@@ -380,6 +298,38 @@ function formatoPrecio(precio) {
   }).format(precio);
 }
 
+// Presentación de horas en formato de 12 horas y zona horaria de Panamá.
+// Los valores originales (24 horas) se conservan para Supabase y los controles de edición.
+function formatearHoraPanama(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const raw = String(value).trim();
+
+  // Si el servidor entrega una fecha/hora con zona explícita, convertirla a Panamá.
+  const tieneFecha = /[T ]\d{1,2}:\d{2}/.test(raw);
+  const tieneZona = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  if (tieneFecha && tieneZona) {
+    const date = new Date(raw);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("es-PA", {
+        timeZone: "America/Panama",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      }).format(date);
+    }
+  }
+
+  // Las horas SQL sin fecha/zona se interpretan como hora local de Panamá.
+  const match = raw.match(/(?:T|\s)?(\d{1,2}):(\d{2})/);
+  if (!match) return raw;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return raw;
+  const suffix = hour < 12 ? "a. m." : "p. m.";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
 function mostrarTarifasServicio(servicio) {
   const tarifas = Array.isArray(servicio.tarifas) ? servicio.tarifas : [];
   const confirmadas = tarifas.filter(t =>
@@ -402,26 +352,6 @@ function mostrarTarifasServicio(servicio) {
 
 async function mostrarCliente() {
   estiloBase();
-  // Diseño visual exclusivo de la pantalla de reserva del cliente.
-  // No modifica el flujo del formulario ni las llamadas a Supabase.
-  document.body.style.cssText = `margin:0;min-height:100vh;color:#183126;font-family:Arial,sans-serif;background:linear-gradient(135deg,rgba(4,18,14,.62),rgba(4,18,14,.48)),url('./fondo-reserva-carwash.jpg') center center / cover fixed no-repeat;background-attachment:fixed`;
-  if (!document.getElementById("ccw-client-booking-visual")) {
-    const visual = document.createElement("style");
-    visual.id = "ccw-client-booking-visual";
-    visual.textContent = `
-      body:has(#ccw-booking-form) > header { background:rgba(7,25,19,.76)!important; backdrop-filter:blur(5px); }
-      body:has(#ccw-booking-form) > main { width:min(94%,900px); box-sizing:border-box; margin:24px auto!important; padding:16px!important; }
-      body:has(#ccw-booking-form) > main > section { background:rgba(255,255,255,.97)!important; border:1px solid rgba(255,255,255,.75)!important; border-radius:18px!important; box-shadow:0 18px 55px rgba(0,0,0,.30); }
-      body:has(#ccw-booking-form) #ccw-booking-form input,
-      body:has(#ccw-booking-form) #ccw-booking-form select,
-      body:has(#ccw-booking-form) #ccw-booking-form textarea { box-sizing:border-box; border:1px solid #cbd9d0; border-radius:9px; background:#fff; color:#183126; }
-      body:has(#ccw-booking-form) #ccw-booking-form input:focus,
-      body:has(#ccw-booking-form) #ccw-booking-form select:focus,
-      body:has(#ccw-booking-form) #ccw-booking-form textarea:focus { outline:3px solid rgba(215,181,109,.42); border-color:#18764e; }
-      @media(max-width:600px){body:has(#ccw-booking-form) > main{width:100%;margin:12px auto!important;padding:10px!important}body:has(#ccw-booking-form) > main > section{padding:16px!important;border-radius:14px!important}}
-    `;
-    document.head.appendChild(visual);
-  }
   document.body.innerHTML = `
     ${cabecera("Agendar una cita")}
     <main style="max-width:760px;margin:24px auto;padding:16px;display:grid;gap:14px">
@@ -826,7 +756,7 @@ return true;
       timeSelect.add(new Option("Selecciona un horario disponible", ""));
       const slots = Array.isArray(data.slots) ? data.slots : [];
       slots.forEach(slot => {
-        const label = slot.capacity > 1 ? `${slot.time} · ${slot.capacity} cupos` : `${slot.time} · ${slot.capacity} cupo`;
+        const label = slot.capacity > 1 ? `${formatearHoraPanama(slot.time)} · ${slot.capacity} cupos` : `${formatearHoraPanama(slot.time)} · ${slot.capacity} cupo`;
         timeSelect.add(new Option(label, slot.time));
       });
       timeSelect.disabled = slots.length === 0;
@@ -950,7 +880,7 @@ if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
         <p>Tu código de reserva es:</p>
         <p style="font-size:24px;font-weight:bold;letter-spacing:1px">${escaparHTML(data.booking_code || "")}</p>
         <p>Fecha: ${escaparHTML(data.appointment_date || booking.appointment_date)}</p>
-        <p>Hora solicitada: ${escaparHTML(booking.requested_start_time)}</p>
+        <p>Hora solicitada: ${escaparHTML(formatearHoraPanama(booking.requested_start_time))}</p>
         <p>Servicio: ${escaparHTML(tariff.serviceName)}</p>
         <p>Precio confirmado: ${escaparHTML(formatoPrecio(tariff.price))}</p>
         <p>Guarda tu código para futuras consultas.</p>`;
@@ -964,10 +894,10 @@ if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
 }
 
 function mostrarLoginAdmin() {
-  estiloFondoLogin();
+  estiloBase();
   document.body.innerHTML = `
     ${cabecera("Acceso administrativo")}
-    <main class="ccw-auth-panel" style="max-width:420px;margin:35px auto;padding:22px">
+    <main style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-login" style="display:grid;gap:14px">
         <label for="ccw-email">Correo de administración</label>
         <input id="ccw-email" type="email" autocomplete="username" required style="padding:12px">
@@ -1064,7 +994,7 @@ function renderReservasAdmin(reservas) {
           </span>
           <span style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3px 12px">
             <span><strong>Casa:</strong> ${escaparHTML(address)}</span>
-            <span><strong>Hora:</strong> ${escaparHTML(r.requested_start_time || "—")}</span>
+            <span><strong>Hora:</strong> ${escaparHTML(formatearHoraPanama(r.requested_start_time))}</span>
             <span style="grid-column:1/-1"><strong>Cliente:</strong> ${escaparHTML(r.customer_name || "—")}</span>
             <span style="grid-column:1/-1"><strong>Teléfono:</strong> ${escaparHTML(r.customer_phone || "—")}</span>
           </span>
@@ -1103,9 +1033,9 @@ function renderReservasAdmin(reservas) {
             <section style="border-top:1px solid #edf1ee;padding-top:7px;margin-top:2px;display:grid;gap:4px">
               <div><strong>Servicio:</strong> ${escaparHTML(v.service_name || "Servicio")}</div>
               <div><strong>Estado del lavado:</strong> ${escaparHTML(v.assignment_status || "Sin asignación")}</div>
-              <div><strong>Horario asignado:</strong> ${escaparHTML(v.scheduled_start || "Pendiente")} – ${escaparHTML(v.scheduled_end || "Pendiente")}</div>
-              ${v.actual_start ? `<div><strong>Inicio real:</strong> ${escaparHTML(v.actual_start)}</div>` : ""}
-              ${v.actual_end ? `<div><strong>Finalizado:</strong> ${escaparHTML(v.actual_end)}</div>` : ""}
+              <div><strong>Horario asignado:</strong> ${escaparHTML(formatearHoraPanama(v.scheduled_start || "Pendiente"))} – ${escaparHTML(formatearHoraPanama(v.scheduled_end || "Pendiente"))}</div>
+              ${v.actual_start ? `<div><strong>Inicio real:</strong> ${escaparHTML(formatearHoraPanama(v.actual_start))}</div>` : ""}
+              ${v.actual_end ? `<div><strong>Finalizado:</strong> ${escaparHTML(formatearHoraPanama(v.actual_end))}</div>` : ""}
               <div><strong>Lavador asignado:</strong> ${escaparHTML(v.washer_name || "Sin asignar")}</div>
               ${serviceDone ? '<div style="color:#17633d;font-weight:700">✓ Lavado terminado</div>' : `
               <div style="border:1px solid #b9d7c5;background:#f5fbf7;border-radius:7px;padding:9px;display:grid;gap:7px;margin:5px 0">
@@ -1614,7 +1544,7 @@ async function cargarJornadasAdmin() {
     if (!result || result.success !== true) {
       throw new Error(result?.error || "El servidor no confirmó la consulta de jornadas.");
     }
-    list.innerHTML = (result.plans || []).map(p => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px"><strong>${escaparHTML(p.plan_date)}</strong><div>${escaparHTML(String(p.opening_time).slice(0,5))}–${escaparHTML(String(p.closing_time).slice(0,5))}</div><div>${p.published_at ? "Publicada" : "Borrador"}</div>${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}</div>`).join("") || "No hay jornadas registradas.";
+    list.innerHTML = (result.plans || []).map(p => `<div style="border:1px solid #d8e4dc;border-radius:8px;padding:10px"><strong>${escaparHTML(p.plan_date)}</strong><div>${escaparHTML(formatearHoraPanama(p.opening_time))}–${escaparHTML(formatearHoraPanama(p.closing_time))}</div><div>${p.published_at ? "Publicada" : "Borrador"}</div>${p.notes ? `<small>${escaparHTML(p.notes)}</small>` : ""}</div>`).join("") || "No hay jornadas registradas.";
   } catch (error) {
     if (msg) msg.textContent = error.message || "No se pudieron consultar las jornadas.";
   }
@@ -1808,11 +1738,11 @@ function borrarSesionLavador() {
 }
 
 function mostrarLoginLavador(message = "") {
-  estiloFondoLogin();
+  estiloBase();
   borrarSesionLavador();
   document.body.innerHTML = `
     ${cabecera("Acceso del lavador")}
-    <main class="ccw-auth-panel" style="max-width:420px;margin:35px auto;padding:22px">
+    <main style="max-width:420px;margin:35px auto;padding:22px">
       <form id="ccw-pin-form" style="display:grid;gap:14px">
         <p>Introduce únicamente el PIN diario que te entregó la administración.</p>
         <label for="ccw-pin">PIN de 4 dígitos</label>
@@ -1943,8 +1873,8 @@ async function cargarTrabajosLavador() {
       <article data-job-id="${assignmentId}" style="background:white;border:1px solid #d7e1da;border-radius:12px;padding:16px;display:grid;gap:10px">
         <strong style="font-size:18px">${escaparHTML(job.service_name || "Servicio asignado")}</strong>
         <p style="margin:0">Estado: <strong>${escaparHTML(job.status || "asignado")}</strong></p>
-        <p style="margin:0">Inicio programado: ${escaparHTML(job.scheduled_start || "Pendiente")}</p>
-        <p style="margin:0">Fin programado: ${escaparHTML(job.scheduled_end || "Pendiente")}</p>
+        <p style="margin:0">Inicio programado: ${escaparHTML(formatearHoraPanama(job.scheduled_start || "Pendiente"))}</p>
+        <p style="margin:0">Fin programado: ${escaparHTML(formatearHoraPanama(job.scheduled_end || "Pendiente"))}</p>
         <div style="background:#f4f7f5;border-radius:8px;padding:12px;display:grid;gap:6px">
           <strong>Datos del cliente y ubicación</strong>
           <p style="margin:0"><strong>Cliente:</strong> ${escaparHTML(job.customer_name || "No registrado")}</p>
