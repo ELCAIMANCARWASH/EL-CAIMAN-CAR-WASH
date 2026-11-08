@@ -1572,7 +1572,6 @@ async function solicitudDirectorioAdmin(path, options = {}) {
 
 function limpiarFormularioClienteAdmin() {
   ["ccw-customer-id","ccw-dir-name","ccw-dir-phone","ccw-dir-email","ccw-dir-address","ccw-dir-vehicles"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("ccw-dir-type").value = "";
   document.getElementById("ccw-customer-form-title").textContent = "Registrar cliente";
 }
 
@@ -1583,8 +1582,23 @@ async function buscarClientesDirectorioAdmin() {
   box.innerHTML = "<p>Buscando clientes…</p>";
   try {
     const query = new URLSearchParams({ select: "id,full_name,phone,email,address,customer_vehicles(id,license_plate,vehicle_type)", order: "full_name.asc", limit: "100" });
-    if (term) query.set("or", `(full_name.ilike.*${term}*,phone.ilike.*${term}*,address.ilike.*${term}*)`);
-    const rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
+    let rows;
+    if (term) {
+      query.set("or", `(full_name.ilike.*${term}*,phone.ilike.*${term}*,address.ilike.*${term}*)`);
+      rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
+      const vehicleQuery = new URLSearchParams({ select: "customer_id", license_plate: `ilike.*${term}*`, limit: "100" });
+      const vehicleMatches = await solicitudDirectorioAdmin(`customer_vehicles?${vehicleQuery.toString()}`);
+      const ids = [...new Set((vehicleMatches || []).map(v => v.customer_id).filter(Boolean))];
+      if (ids.length) {
+        const byPlateQuery = new URLSearchParams({ select: "id,full_name,phone,email,address,customer_vehicles(id,license_plate,vehicle_type)", order: "full_name.asc", id: `in.(${ids.join(",")})` });
+        const byPlate = await solicitudDirectorioAdmin(`customers?${byPlateQuery.toString()}`);
+        const merged = new Map((rows || []).map(c => [c.id, c]));
+        (byPlate || []).forEach(c => merged.set(c.id, c));
+        rows = [...merged.values()].sort((a, b) => a.full_name.localeCompare(b.full_name));
+      }
+    } else {
+      rows = await solicitudDirectorioAdmin(`customers?${query.toString()}`);
+    }
     const list = Array.isArray(rows) ? rows : [];
     box.innerHTML = list.length ? list.map(c => {
       const vehicles = Array.isArray(c.customer_vehicles) ? c.customer_vehicles : [];
@@ -1604,7 +1618,6 @@ async function buscarClientesDirectorioAdmin() {
       document.getElementById("ccw-dir-phone").value = c.phone || "";
       document.getElementById("ccw-dir-email").value = c.email || "";
       document.getElementById("ccw-dir-address").value = c.address || "";
-      const v = (c.customer_vehicles || [])[0] || {};
       document.getElementById("ccw-dir-vehicles").value = (c.customer_vehicles || []).map(v => [v.license_plate || "", v.vehicle_type || ""].join(" | ")).join("\n");
       document.getElementById("ccw-customer-form-title").textContent = "Editar cliente";
       document.getElementById("ccw-dir-name").focus();
